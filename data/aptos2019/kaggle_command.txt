@@ -1,0 +1,3 @@
+# Official Kaggle CLI download command:
+kaggle competitions download -c aptos2019-blindness-detection -p ./data/aptos2019
+unzip ./data/aptos2019/aptos2019-blindness-detection.zip -d ./data/aptos2019/

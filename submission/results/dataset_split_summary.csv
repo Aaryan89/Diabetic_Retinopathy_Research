@@ -1,0 +1,6 @@
+Grade,Severity Name,Full Dataset,Train (70%),Val (15%),Test (15%)
+0,0 - No DR,1805,1263,271,271
+1,1 - Mild NPDR,370,259,55,56
+2,2 - Moderate NPDR,999,699,150,150
+3,3 - Severe NPDR,193,135,29,29
+4,4 - Proliferative DR,295,207,44,44

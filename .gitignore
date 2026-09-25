@@ -1,0 +1,86 @@
+# ==============================================================================
+# Byte-compiled / optimized / Python artifacts
+# ==============================================================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+*.manifest
+*.spec
+
+# ==============================================================================
+# Virtual Environments
+# ==============================================================================
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+gpu_env/
+
+# ==============================================================================
+# Datasets & Heavy Image Directories (APTOS 2019)
+# ==============================================================================
+data/aptos2019/train_images/
+data/aptos2019/preprocessed_224/
+data/**/*.png
+data/**/*.jpg
+data/**/*.jpeg
+*.parquet
+*.zip
+*.tar.gz
+
+# ==============================================================================
+# Deep Learning Model Checkpoints & Large Binaries (>16MB each)
+# ==============================================================================
+*.pt
+*.pth
+*.ckpt
+*.bin
+*.h5
+*.onnx
+submission/results/*.pt
+
+# ==============================================================================
+# Raw Reference PDFs, Extraction Dumps & Scratch Scripts
+# ==============================================================================
+sample_report.pdf
+sample_report_extracted.txt
+papers_raw/
+papers_text/
+all_papers_detailed_info.txt
+papers_summary_overview.txt
+p1_details.txt
+extract_details.py
+
+# ==============================================================================
+# IDEs, Editors & OS Generated Files
+# ==============================================================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+*.tmp
+*.log

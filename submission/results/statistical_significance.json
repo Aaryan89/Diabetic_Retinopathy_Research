@@ -1,0 +1,32 @@
+{
+    "best_variant_comparison": {
+        "baseline": "Variant A (Softmax)",
+        "comparison": "Variant C (Continuous Regression)",
+        "baseline_qwk": 0.872426449893535,
+        "comparison_qwk": 0.8787675282377928,
+        "delta_qwk": 0.006341078344257789,
+        "bootstrap_mean_diff": 0.006167100682778848,
+        "bootstrap_95_ci": [
+            -0.014186085423349556,
+            0.026541409004655472
+        ],
+        "bootstrap_p_value": 0.264,
+        "wilcoxon_stat": 1607.5,
+        "wilcoxon_p_value": 0.2819565403811394
+    },
+    "coral_variant_comparison": {
+        "baseline": "Variant A (Softmax)",
+        "comparison": "Variant B (CORAL Ordinal)",
+        "baseline_qwk": 0.872426449893535,
+        "comparison_qwk": 0.7273426572495911,
+        "delta_qwk": -0.1450837926439439,
+        "bootstrap_mean_diff": -0.14584952754297006,
+        "bootstrap_95_ci": [
+            -0.1791954304389229,
+            -0.11453439780229584
+        ],
+        "bootstrap_p_value": 0.0,
+        "wilcoxon_stat": 1973.0,
+        "wilcoxon_p_value": 3.197868257986127e-23
+    }
+}
