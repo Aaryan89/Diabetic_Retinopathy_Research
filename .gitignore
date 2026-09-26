@@ -64,7 +64,7 @@ submission/results/*.pt
 # ==============================================================================
 sample_report.pdf
 sample_report_extracted.txt
-papers_raw/
+papers_raw/paper_1.html
 papers_text/
 all_papers_detailed_info.txt
 papers_summary_overview.txt
