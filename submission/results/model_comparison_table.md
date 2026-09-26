@@ -1,9 +1,10 @@
-# Model Performance Comparison on Holdout Test Set
+# Model Performance Comparison on Holdout Test Set (N=550)
 
-| Model Variant                |   QWK (Primary) | Accuracy (%)   |    MAE |   Macro F1 |   Weighted F1 | Exact Match (Dist=0)   | Off-by-1 (Dist=1)   | Severe Error (Dist>=2)   |
-|:-----------------------------|----------------:|:---------------|-------:|-----------:|--------------:|:-----------------------|:--------------------|:-------------------------|
-| Variant A (Softmax Baseline) |          0.8724 | 80.18%         | 0.2673 |     0.639  |        0.8029 | 80.2%                  | 14.2%               | 5.6%                     |
-| Variant B (CORAL Ordinal)    |          0.7273 | 59.64%         | 0.6964 |     0.2934 |        0.5112 | 59.6%                  | 14.0%               | 26.4%                    |
-| Variant C (Regression)       |          0.8788 | 75.64%         | 0.2873 |     0.5579 |        0.7608 | 75.6%                  | 20.5%               | 3.8%                     |
+| Model Variant                                 | QWK (Primary)           | Accuracy (%)   | MAE                     | Severe Error (d>=2)   | Severe F1 (Grade 3)     | PDR F1 (Grade 4)        | Exact Match (d=0)   | Off-by-1 (d=1)   |
+|:----------------------------------------------|:------------------------|:---------------|:------------------------|:----------------------|:------------------------|:------------------------|:--------------------|:-----------------|
+| Variant A (Softmax Baseline)                  | 0.8724 [0.8385, 0.9044] | 80.18%         | 0.2673 [0.2182, 0.3200] | 5.6% [3.6%, 7.6%]     | 0.3791 [0.2221, 0.5313] | 0.5147 [0.3830, 0.6377] | 80.2%               | 14.2%            |
+| Variant B (CORAL Ordinal)                     | 0.7273 [0.6874, 0.7641] | 59.64%         | 0.6964 [0.6200, 0.7710] | 26.4% [22.9%, 30.2%]  | 0.0000 [0.0000, 0.0000] | 0.3692 [0.2857, 0.4502] | 59.6%               | 14.0%            |
+| Variant C (Continuous Regression)             | 0.8788 [0.8490, 0.9039] | 75.64%         | 0.2873 [0.2400, 0.3364] | 3.8% [2.4%, 5.5%]     | 0.2528 [0.1333, 0.3704] | 0.3589 [0.2034, 0.5067] | 75.6%               | 20.5%            |
+| Variant CORN (Conditional Ordinal + Soft-QWK) | 0.8482 [0.8150, 0.8792] | 69.09%         | 0.3764 [0.3200, 0.4291] | 5.1% [3.3%, 7.1%]     | 0.2724 [0.1746, 0.3735] | 0.4584 [0.3124, 0.5909] | 69.1%               | 25.8%            |
 
-*Note: Quadratic Weighted Kappa (QWK) is the primary clinical metric, penalizing multi-grade misclassifications quadratically.*
+*Note: 95% Confidence Intervals [2.5%, 97.5%] computed via 1,000 paired bootstrap iterations on the test split. Quadratic Weighted Kappa (QWK) is the primary clinical metric.*

@@ -157,10 +157,25 @@ def get_stratified_splits(csv_path, seed=GLOBAL_SEED):
     test_df['split'] = 'test'
     return train_df, val_df, test_df
 
+def get_class_balanced_weights(class_counts, beta=0.9999):
+    """
+    Computes Class-Balanced Loss weights based on Effective Number of Samples (Cui et al., CVPR 2019).
+    E_n = (1 - beta^n) / (1 - beta)
+    weight_c = (1 - beta) / (1 - beta^n_c)
+    Normalized so sum(weights) = num_classes.
+    """
+    counts = np.array(class_counts, dtype=np.float32)
+    effective_num = 1.0 - np.power(beta, counts)
+    weights = (1.0 - beta) / effective_num
+    weights = weights / np.sum(weights) * len(class_counts)
+    return torch.tensor(weights, dtype=torch.float32)
+
 def get_dataloaders(data_dir=os.path.join(".", "data", "aptos2019"),
                     batch_size=32,
                     num_workers=0,
-                    seed=GLOBAL_SEED):
+                    seed=GLOBAL_SEED,
+                    use_weighted_sampler=False,
+                    beta=0.9999):
     csv_path = os.path.join(data_dir, "train.csv")
     train_df, val_df, test_df = get_stratified_splits(csv_path, seed=seed)
 
@@ -168,12 +183,33 @@ def get_dataloaders(data_dir=os.path.join(".", "data", "aptos2019"),
     val_dataset   = APTOSDataset(val_df, data_dir, is_train=False)
     test_dataset  = APTOSDataset(test_df, data_dir, is_train=False)
 
-    train_loader = DataLoader(
-        train_dataset,
-        batch_size=batch_size,
-        shuffle=True,
-        num_workers=num_workers
-    )
+    if use_weighted_sampler:
+        # Calculate class counts in training split
+        counts = train_df['diagnosis'].value_counts().sort_index().values
+        cb_weights = get_class_balanced_weights(counts, beta=beta).numpy()
+        # Per-sample weight for WeightedRandomSampler to present minority classes more often
+        sample_weights = [cb_weights[label] for label in train_df['diagnosis']]
+        sample_weights = torch.tensor(sample_weights, dtype=torch.float32)
+        train_sampler = torch.utils.data.WeightedRandomSampler(
+            weights=sample_weights,
+            num_samples=len(train_dataset),
+            replacement=True
+        )
+        train_loader = DataLoader(
+            train_dataset,
+            batch_size=batch_size,
+            sampler=train_sampler,
+            shuffle=False,
+            num_workers=num_workers
+        )
+    else:
+        train_loader = DataLoader(
+            train_dataset,
+            batch_size=batch_size,
+            shuffle=True,
+            num_workers=num_workers
+        )
+
     val_loader = DataLoader(
         val_dataset,
         batch_size=batch_size,

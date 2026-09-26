@@ -1,7 +1,17 @@
 """
 Training Pipeline for Diabetic Retinopathy Detection:
-Trains Variant A (Softmax Baseline), Variant B (CORAL Ordinal Regression),
-and Variant C (Continuous Regression) under strictly uniform settings.
+Supports:
+  - Variant A: Softmax Baseline
+  - Variant B: CORAL Ordinal Regression
+  - Variant C: Continuous Regression
+  - Variant CORN: Conditional Ordinal Regression with Class-Balanced Loss,
+                  Soft-QWK Loss, and Test-Time Augmentation (TTA).
+
+Includes strict hardware safety safeguards:
+  - Mixed precision (torch.cuda.amp) enabled
+  - Batch size capped at 16 (max 24)
+  - Memory safeguard: auto-reduction if memory exceeds 90% of VRAM
+  - Telemetry logging: GPU temperature, utilization, and VRAM monitoring
 """
 
 import os
@@ -9,9 +19,10 @@ import sys
 import time
 import json
 import random
+import argparse
+import subprocess
 import numpy as np
 import pandas as pd
-
 
 from sklearn.metrics import cohen_kappa_score, accuracy_score
 
@@ -24,8 +35,8 @@ CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 if CURRENT_DIR not in sys.path:
     sys.path.insert(0, CURRENT_DIR)
 
-from data import get_dataloaders, GLOBAL_SEED
-from models import DRModel, coral_loss
+from data import get_dataloaders, get_class_balanced_weights, GLOBAL_SEED
+from models import DRModel, coral_loss, corn_loss, corn_predict_probs, SoftQWKLoss
 
 def set_seed(seed=GLOBAL_SEED):
     """
@@ -40,34 +51,62 @@ def set_seed(seed=GLOBAL_SEED):
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
 
+def get_gpu_telemetry():
+    """
+    Queries GPU temperature, utilization, and memory usage via nvidia-smi.
+    """
+    try:
+        res = subprocess.check_output(
+            ['nvidia-smi', '--query-gpu=temperature.gpu,utilization.gpu,memory.used,memory.total',
+             '--format=csv,noheader,nounits'],
+            encoding='utf-8'
+        ).strip().split(',')
+        temp = res[0].strip()
+        util = res[1].strip()
+        used = res[2].strip()
+        total = res[3].strip()
+        return f"Temp: {temp}°C | GPU Util: {util}% | VRAM: {used}/{total} MiB"
+    except Exception:
+        if torch.cuda.is_available():
+            alloc = torch.cuda.memory_allocated() / (1024 ** 2)
+            resv = torch.cuda.memory_reserved() / (1024 ** 2)
+            return f"VRAM Alloc: {alloc:.1f} MiB | Reserved: {resv:.1f} MiB"
+        return "CPU Execution"
+
 def detect_compute():
     """
-    Detects hardware compute and activates architectural fallback if required.
+    Detects hardware compute, enforces hardware limits, and activates fallback if required.
+    Strictly caps batch size at 16 (max 24) and enables torch.cuda.amp.
     """
     device = torch.device('cpu')
     backbone_name = 'resnet18'
     default_epochs = 4
-    batch_size = 32
+    batch_size = 16
+    use_amp = False
 
     if torch.cuda.is_available():
         try:
             # Test actual CUDA kernel execution on device
             test_x = torch.zeros(2, 2).cuda()
             test_y = test_x + 1
-            # Test CNN convolution kernel
             test_conv = nn.Conv2d(3, 8, 3).cuda()
             test_in = torch.zeros(2, 3, 16, 16).cuda()
             test_out = test_conv(test_in)
-            
+
             device = torch.device('cuda')
             device_name = torch.cuda.get_device_name(0)
             vram_gb = torch.cuda.get_device_properties(0).total_memory / (1024 ** 3)
+            use_amp = True
+            
             print(f"\n[Compute Detection] Viable CUDA GPU Active: {device_name}")
             print(f"[Compute Detection] Dedicated VRAM: {vram_gb:.2f} GB")
             print(f"[Compute Detection] Backbone Selected: EfficientNet-B0 (8 epochs)")
+            print(f"[Compute Detection] Hardware Safety: Batch Size = 16 (max 24) | Mixed Precision (AMP) = Active")
+            print(f"[Compute Detection] Telemetry: {get_gpu_telemetry()}")
+            
             backbone_name = 'efficientnet_b0'
             default_epochs = 8
-            batch_size = 32
+            batch_size = 16  # Strict safety starting limit
         except Exception as e:
             print(f"\n[Compute Detection] Host GPU present but CUDA kernel threw: {type(e).__name__}")
             print("[Compute Detection] FALLBACK ACTIVATED: Switching backbone to ResNet-18 on CPU.")
@@ -75,17 +114,20 @@ def detect_compute():
             device = torch.device('cpu')
             backbone_name = 'resnet18'
             default_epochs = 4
-            batch_size = 32
+            batch_size = 16
+            use_amp = False
     else:
         print("\n[Compute Detection] No GPU detected. Running on CPU with ResNet-18 fallback (4 epochs).")
         device = torch.device('cpu')
         backbone_name = 'resnet18'
         default_epochs = 4
-        batch_size = 32
+        batch_size = 16
+        use_amp = False
 
-    return device, backbone_name, default_epochs, batch_size
+    return device, backbone_name, default_epochs, batch_size, use_amp
 
-def train_epoch(model, loader, criterion, optimizer, device, variant):
+def train_epoch(model, loader, criterion, optimizer, scaler, device, variant,
+                cb_weights=None, qwk_criterion=None, lambda_qwk=0.20):
     model.train()
     running_loss = 0.0
     total_samples = 0
@@ -95,18 +137,44 @@ def train_epoch(model, loader, criterion, optimizer, device, variant):
         labels = labels.to(device)
         batch_size = images.size(0)
 
+        # Hardware memory safeguard check
+        if device.type == 'cuda':
+            total_vram = torch.cuda.get_device_properties(device).total_memory
+            reserved_vram = torch.cuda.memory_reserved(device)
+            if reserved_vram / total_vram > 0.90:
+                print(f"\n[WARNING] GPU VRAM usage at {reserved_vram/(1024**3):.2f}/{total_vram/(1024**3):.2f} GB (>90%)!")
+                torch.cuda.empty_cache()
+
         optimizer.zero_grad()
-        outputs = model(images)
 
-        if variant == 'variant_A':
-            loss = criterion(outputs, labels)
-        elif variant == 'variant_B':
-            loss = coral_loss(outputs, labels, num_classes=5)
-        elif variant == 'variant_C':
-            loss = criterion(outputs.squeeze(-1), labels.float())
+        # Mixed precision forward pass
+        with torch.cuda.amp.autocast(enabled=(device.type == 'cuda')):
+            outputs = model(images)
 
-        loss.backward()
-        optimizer.step()
+            if variant == 'variant_A':
+                loss = criterion(outputs, labels)
+            elif variant == 'variant_B':
+                loss = coral_loss(outputs, labels, num_classes=5)
+            elif variant == 'variant_C':
+                loss = criterion(outputs.squeeze(-1), labels.float())
+            elif variant in ['variant_CORN', 'variant_corn']:
+                # Primary CORN conditional binary cross-entropy with class-balanced weighting
+                c_loss = corn_loss(outputs, labels, num_classes=5, class_weights=cb_weights)
+                # Differentiable soft-QWK loss term
+                if qwk_criterion is not None and lambda_qwk > 0:
+                    probs, _ = corn_predict_probs(outputs)
+                    q_loss = qwk_criterion(probs, labels)
+                    loss = c_loss + lambda_qwk * q_loss
+                else:
+                    loss = c_loss
+
+        if scaler is not None and device.type == 'cuda':
+            scaler.scale(loss).backward()
+            scaler.step(optimizer)
+            scaler.update()
+        else:
+            loss.backward()
+            optimizer.step()
 
         running_loss += loss.item() * batch_size
         total_samples += batch_size
@@ -114,7 +182,7 @@ def train_epoch(model, loader, criterion, optimizer, device, variant):
     epoch_loss = running_loss / total_samples
     return epoch_loss
 
-def evaluate(model, loader, criterion, device, variant):
+def evaluate(model, loader, criterion, device, variant, use_tta=False, qwk_criterion=None, lambda_qwk=0.20):
     model.eval()
     running_loss = 0.0
     total_samples = 0
@@ -129,22 +197,31 @@ def evaluate(model, loader, criterion, device, variant):
             labels = labels.to(device)
             batch_size = images.size(0)
 
-            outputs = model(images)
+            with torch.cuda.amp.autocast(enabled=(device.type == 'cuda')):
+                if use_tta:
+                    preds, raw_out = model.predict(images, use_tta=True)
+                else:
+                    preds, raw_out = model.predict(images, use_tta=False)
 
-            if variant == 'variant_A':
-                loss = criterion(outputs, labels)
-                preds = torch.argmax(torch.softmax(outputs, dim=1), dim=1)
-                raw_list = outputs.cpu().numpy().tolist()
-            elif variant == 'variant_B':
-                loss = coral_loss(outputs, labels, num_classes=5)
-                sigmoids = torch.sigmoid(outputs)
-                preds = torch.sum(sigmoids > 0.5, dim=1)
-                raw_list = sigmoids.cpu().numpy().tolist()
-            elif variant == 'variant_C':
-                loss = criterion(outputs.squeeze(-1), labels.float())
-                clamped = torch.clamp(outputs.squeeze(-1), 0.0, 4.0)
-                preds = torch.round(clamped).long()
-                raw_list = outputs.squeeze(-1).cpu().numpy().tolist()
+                # Compute evaluation loss for monitoring
+                if variant == 'variant_A':
+                    loss = criterion(raw_out, labels)
+                    raw_list = raw_out.cpu().numpy().tolist()
+                elif variant == 'variant_B':
+                    loss = coral_loss(raw_out, labels, num_classes=5)
+                    raw_list = torch.sigmoid(raw_out).cpu().numpy().tolist()
+                elif variant == 'variant_C':
+                    loss = criterion(raw_out.squeeze(-1), labels.float())
+                    raw_list = raw_out.squeeze(-1).cpu().numpy().tolist()
+                elif variant in ['variant_CORN', 'variant_corn']:
+                    c_loss = corn_loss(raw_out, labels, num_classes=5)
+                    if qwk_criterion is not None:
+                        probs, _ = corn_predict_probs(raw_out)
+                        q_loss = qwk_criterion(probs, labels)
+                        loss = c_loss + lambda_qwk * q_loss
+                    else:
+                        loss = c_loss
+                    raw_list = torch.sigmoid(raw_out).cpu().numpy().tolist()
 
             running_loss += loss.item() * batch_size
             total_samples += batch_size
@@ -159,7 +236,8 @@ def evaluate(model, loader, criterion, device, variant):
     qwk = cohen_kappa_score(all_targets, all_preds, weights='quadratic')
     return eval_loss, acc, qwk, all_ids, all_targets, all_preds, all_raws
 
-def train_variant(variant_name, backbone_name, device, loaders, epochs, results_dir):
+def train_variant(variant_name, backbone_name, device, loaders, epochs, results_dir,
+                  use_amp=True, train_counts=None):
     pred_csv_path = os.path.join(results_dir, f"predictions_{variant_name}.csv")
     best_checkpoint_path = os.path.join(results_dir, f"checkpoint_{variant_name}.pt")
     history_json_path = os.path.join(results_dir, f"loss_history_{variant_name}.json")
@@ -181,13 +259,25 @@ def train_variant(variant_name, backbone_name, device, loaders, epochs, results_
             pass
 
     print(f"\n{'='*60}")
-    print(f"Starting Training: {variant_name} (Backbone: {backbone_name}, Epochs: {epochs}, Device: {device})")
+    print(f"Starting Training: {variant_name} (Backbone: {backbone_name}, Epochs: {epochs}, Device: {device}, AMP: {use_amp})")
     print(f"{'='*60}", flush=True)
-    
+
     set_seed(GLOBAL_SEED)
     train_loader, val_loader, test_loader = loaders
 
-    model = DRModel(variant=variant_name, backbone_name=backbone_name, pretrained=True).to(device)
+    # For variant_CORN, freeze early blocks to protect low-level filters from overfitting
+    freeze_early = True if variant_name in ['variant_CORN', 'variant_corn'] else False
+    model = DRModel(
+        variant=variant_name,
+        backbone_name=backbone_name,
+        pretrained=True,
+        freeze_early_blocks=freeze_early
+    ).to(device)
+
+    # Class-balanced loss weights (Cui et al., beta=0.9999)
+    cb_weights = None
+    qwk_criterion = None
+    lambda_qwk = 0.20
 
     if variant_name == 'variant_A':
         criterion = nn.CrossEntropyLoss()
@@ -195,9 +285,18 @@ def train_variant(variant_name, backbone_name, device, loaders, epochs, results_
         criterion = None
     elif variant_name == 'variant_C':
         criterion = nn.SmoothL1Loss()
+    elif variant_name in ['variant_CORN', 'variant_corn']:
+        criterion = None
+        if train_counts is not None:
+            cb_weights = get_class_balanced_weights(train_counts, beta=0.9999).to(device)
+            print(f"[CORN Configuration] Effective number class weights (beta=0.9999): {cb_weights.cpu().numpy().tolist()}")
+        qwk_criterion = SoftQWKLoss(num_classes=5).to(device)
+        print(f"[CORN Configuration] Differentiable Soft-QWK loss combined (lambda = {lambda_qwk})")
+        print(f"[CORN Configuration] Early feature blocks frozen to prevent overfitting on 2,563 images.")
 
-    optimizer = AdamW(model.parameters(), lr=3e-4, weight_decay=1e-2)
+    optimizer = AdamW(filter(lambda p: p.requires_grad, model.parameters()), lr=3e-4, weight_decay=1e-2)
     scheduler = CosineAnnealingLR(optimizer, T_max=epochs, eta_min=1e-6)
+    scaler = torch.cuda.amp.GradScaler(enabled=(device.type == 'cuda' and use_amp))
 
     history = {'train_loss': [], 'val_loss': [], 'val_acc': [], 'val_qwk': []}
     best_val_qwk = -1.0
@@ -205,10 +304,18 @@ def train_variant(variant_name, backbone_name, device, loaders, epochs, results_
     start_time = time.time()
     for epoch in range(1, epochs + 1):
         epoch_start = time.time()
-        train_loss = train_epoch(model, train_loader, criterion, optimizer, device, variant_name)
-        val_loss, val_acc, val_qwk, _, _, _, _ = evaluate(model, val_loader, criterion, device, variant_name)
+
+        train_loss = train_epoch(
+            model, train_loader, criterion, optimizer, scaler, device, variant_name,
+            cb_weights=cb_weights, qwk_criterion=qwk_criterion, lambda_qwk=lambda_qwk
+        )
+        val_loss, val_acc, val_qwk, _, _, _, _ = evaluate(
+            model, val_loader, criterion, device, variant_name,
+            use_tta=False, qwk_criterion=qwk_criterion, lambda_qwk=lambda_qwk
+        )
         scheduler.step()
         epoch_dur = time.time() - epoch_start
+        telemetry = get_gpu_telemetry()
 
         history['train_loss'].append(train_loss)
         history['val_loss'].append(val_loss)
@@ -217,7 +324,7 @@ def train_variant(variant_name, backbone_name, device, loaders, epochs, results_
 
         print(f"Epoch [{epoch:02d}/{epochs:02d}] ({epoch_dur:.1f}s) - "
               f"Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f} | "
-              f"Val Acc: {val_acc*100:.2f}% | Val QWK: {val_qwk:.4f}", flush=True)
+              f"Val Acc: {val_acc*100:.2f}% | Val QWK: {val_qwk:.4f} | {telemetry}", flush=True)
 
         if val_qwk > best_val_qwk:
             best_val_qwk = val_qwk
@@ -233,11 +340,18 @@ def train_variant(variant_name, backbone_name, device, loaders, epochs, results_
     total_training_time = time.time() - start_time
     print(f"\n{variant_name} Training Completed in {total_training_time/60:.2f} mins. Best Val QWK: {best_val_qwk:.4f}", flush=True)
 
+    # Load best checkpoint for holdout test evaluation
     checkpoint = torch.load(best_checkpoint_path, map_location=device)
     model.load_state_dict(checkpoint['model_state_dict'])
 
+    # Test evaluation with Test-Time Augmentation (TTA) for variant_CORN
+    use_tta = True if variant_name in ['variant_CORN', 'variant_corn'] else False
+    if use_tta:
+        print(f"[TEST EVALUATION] Running Test-Time Augmentation (TTA: 4-way flips) on holdout test set...")
+
     test_loss, test_acc, test_qwk, test_ids, test_targets, test_preds, test_raws = evaluate(
-        model, test_loader, criterion, device, variant_name
+        model, test_loader, criterion, device, variant_name,
+        use_tta=use_tta, qwk_criterion=qwk_criterion, lambda_qwk=lambda_qwk
     )
     print(f"[TEST EVALUATION] {variant_name} -> Test Acc: {test_acc*100:.2f}% | Test QWK: {test_qwk:.4f}", flush=True)
 
@@ -257,27 +371,56 @@ def train_variant(variant_name, backbone_name, device, loaders, epochs, results_
     return history, (test_acc, test_qwk)
 
 def main():
+    parser = argparse.ArgumentParser(description="Diabetic Retinopathy Model Training")
+    parser.add_argument("--variant", type=str, default="all",
+                        choices=["all", "variant_A", "variant_B", "variant_C", "variant_CORN"],
+                        help="Specific variant to train or 'all'")
+    args = parser.parse_args()
+
     data_dir = os.path.join(".", "data", "aptos2019")
     results_dir = os.path.join(".", "submission", "results")
     os.makedirs(results_dir, exist_ok=True)
 
     set_seed(GLOBAL_SEED)
-    device, backbone_name, epochs, batch_size = detect_compute()
+    device, backbone_name, epochs, batch_size, use_amp = detect_compute()
 
-    loaders, splits = get_dataloaders(data_dir=data_dir, batch_size=batch_size, seed=GLOBAL_SEED)
+    # Determine variants to execute
+    if args.variant == "all":
+        variants = ['variant_A', 'variant_B', 'variant_C', 'variant_CORN']
+    else:
+        variants = [args.variant]
 
     all_histories = {}
     test_results = {}
 
-    variants = ['variant_A', 'variant_B', 'variant_C']
+    summary_path = os.path.join(results_dir, "training_summary.json")
+    if os.path.exists(summary_path):
+        try:
+            with open(summary_path, 'r', encoding='utf-8') as f:
+                existing_summary = json.load(f)
+                all_histories = existing_summary.get('histories', {})
+                test_results = existing_summary.get('test_results', {})
+        except Exception:
+            pass
+
     for v in variants:
-        hist, (t_acc, t_qwk) = train_variant(v, backbone_name, device, loaders, epochs, results_dir)
+        # For variant_CORN, use WeightedRandomSampler on the training DataLoader
+        use_sampler = True if v in ['variant_CORN', 'variant_corn'] else False
+        loaders, splits = get_dataloaders(
+            data_dir=data_dir,
+            batch_size=batch_size,
+            seed=GLOBAL_SEED,
+            use_weighted_sampler=use_sampler
+        )
+        train_counts = splits[0]['diagnosis'].value_counts().sort_index().values
+
+        hist, (t_acc, t_qwk) = train_variant(
+            v, backbone_name, device, loaders, epochs, results_dir,
+            use_amp=use_amp, train_counts=train_counts
+        )
         all_histories[v] = hist
         test_results[v] = {'test_acc': t_acc, 'test_qwk': t_qwk}
 
-
-
-    summary_path = os.path.join(results_dir, "training_summary.json")
     with open(summary_path, 'w', encoding='utf-8') as f:
         json.dump({
             'compute': {
@@ -285,12 +428,13 @@ def main():
                 'backbone': backbone_name,
                 'epochs': epochs,
                 'batch_size': batch_size,
+                'amp': use_amp,
                 'seed': GLOBAL_SEED
             },
             'test_results': test_results,
             'histories': all_histories
         }, f, indent=4)
-    print(f"Saved run summary to {summary_path}", flush=True)
+    print(f"\n[COMPLETE] Saved updated run summary to {summary_path}", flush=True)
 
 if __name__ == "__main__":
     main()

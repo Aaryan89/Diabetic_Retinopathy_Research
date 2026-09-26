@@ -1,5 +1,20 @@
 {
-    "best_variant_comparison": {
+    "variant_B_vs_variant_A": {
+        "baseline": "Variant A (Softmax)",
+        "comparison": "Variant B (CORAL Ordinal)",
+        "baseline_qwk": 0.872426449893535,
+        "comparison_qwk": 0.7273426572495911,
+        "delta_qwk": -0.1450837926439439,
+        "bootstrap_mean_diff": -0.14584952754297006,
+        "bootstrap_95_ci": [
+            -0.1791954304389229,
+            -0.11453439780229584
+        ],
+        "bootstrap_p_value": 0.0,
+        "wilcoxon_stat": 1973.0,
+        "wilcoxon_p_value": 3.197868257986127e-23
+    },
+    "variant_C_vs_variant_A": {
         "baseline": "Variant A (Softmax)",
         "comparison": "Variant C (Continuous Regression)",
         "baseline_qwk": 0.872426449893535,
@@ -14,19 +29,34 @@
         "wilcoxon_stat": 1607.5,
         "wilcoxon_p_value": 0.2819565403811394
     },
-    "coral_variant_comparison": {
+    "variant_CORN_vs_variant_A": {
         "baseline": "Variant A (Softmax)",
-        "comparison": "Variant B (CORAL Ordinal)",
+        "comparison": "Variant CORN (Conditional Ordinal + Soft-QWK)",
         "baseline_qwk": 0.872426449893535,
-        "comparison_qwk": 0.7273426572495911,
-        "delta_qwk": -0.1450837926439439,
-        "bootstrap_mean_diff": -0.14584952754297006,
+        "comparison_qwk": 0.8481646773533787,
+        "delta_qwk": -0.024261772540156268,
+        "bootstrap_mean_diff": -0.02469775099336148,
         "bootstrap_95_ci": [
-            -0.1791954304389229,
-            -0.11453439780229584
+            -0.05345711053822523,
+            0.001652735084226299
+        ],
+        "bootstrap_p_value": 0.036,
+        "wilcoxon_stat": 2409.0,
+        "wilcoxon_p_value": 1.1751805698298902e-05
+    },
+    "variant_CORN_vs_variant_B_coral": {
+        "baseline": "Variant B (CORAL)",
+        "comparison": "Variant CORN (Conditional Ordinal)",
+        "baseline_qwk": 0.7273426572495911,
+        "comparison_qwk": 0.8481646773533787,
+        "delta_qwk": 0.12082202010378762,
+        "bootstrap_mean_diff": 0.12115177654960857,
+        "bootstrap_95_ci": [
+            0.092397035139495,
+            0.15043726091156662
         ],
         "bootstrap_p_value": 0.0,
-        "wilcoxon_stat": 1973.0,
-        "wilcoxon_p_value": 3.197868257986127e-23
+        "wilcoxon_stat": 4180.0,
+        "wilcoxon_p_value": 9.349756793565228e-21
     }
 }
