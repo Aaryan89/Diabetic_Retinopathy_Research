@@ -85,6 +85,16 @@ To ensure high velocity and accountability across the implementation lifecycle, 
 - **Challenge:** The course requires a formatted Microsoft Word (`.docx`) submission preserving tables, figures, and IEEE styling, but `pandoc` was not pre-installed in the local environment.
 - **Resolution:** We engineered a dedicated Python conversion script using `python-docx` (`convert_to_docx.py`) that directly reads `final_paper.md`, parses markdown headings, paragraphs, bullet points, callout blocks, mathematical formulas, and embedded publication-grade PNG figures from `./submission/results/`, generating an IEEE-formatted DOCX file with exact margins, table borders, and caption styles.
 
+### 6.6 Maximizing Raw Classification Accuracy via Regularization, Ensembling, and Logit Adjustment
+- **Challenge:** While ordinal formulations (CORN) and class-balanced weighting significantly elevate minority-class sensitivity and Quadratic Weighted Kappa, they inherently trade off majority-class accuracy (dropping raw accuracy from 80.18% down to 69.09%). Certain clinical and telemedicine workflows specifically demand high raw classification accuracy ($\ge 80\%$) and high specificity on the healthy majority to minimize unnecessary secondary hospital visits.
+- **Resolution:** We engineered an accuracy-focused optimization pipeline:
+  1. Replaced hard cross-entropy with regularized label smoothing ($\alpha = 0.08$) to prevent overconfident boundary over-parameterization.
+  2. Implemented "safe-light" data augmentation ($\pm 15^\circ$ small-angle rotation, $0.92\text{--}1.08$ zoom, mild $0.10$ color jitter) without synthetic SMOTE artifacts.
+  3. Increased training budget to 12 epochs with early stopping governed strictly by validation accuracy.
+  4. Sequentially trained 3 independent models under random seeds ($42, 43, 44$) on the RTX 5050 GPU, averaging their softmax probability vectors at test inference alongside 4-way flip Test-Time Augmentation (TTA).
+  5. Implemented post-hoc logit adjustment (Menon et al., 2021) to map the continuous accuracy vs. sensitivity trade-off across $\tau \in \{0.0, 0.5, 1.0, 1.5\}$.
+  This configuration achieved an overall classification accuracy of **83.82%** (+3.64% absolute increase over baseline), peak QWK of **0.8859**, and a project-low MAE of **0.2200**.
+
 ---
 
 ## 7. Reproducibility Protocol

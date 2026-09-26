@@ -221,6 +221,37 @@ We set $\lambda_{QWK} = 0.20$, providing continuous guidance during backpropagat
 #### 5) Test-Time Augmentation (TTA) and Backbone Regularization
 At test time, predictions are generated via 4-way flip Test-Time Augmentation (averaging predictions across original, horizontal, vertical, and horizontal-vertical mirrored inputs). Furthermore, to prevent the 5.3M parameter EfficientNet-B0 backbone from overfitting on the small 2,563-image training split, we freeze the stem and first three MBConv stages (`features[:4]`), retaining fixed low-level retinal edge filters while fine-tuning higher-level semantic blocks.
 
+### F. Optimizing Raw Classification Accuracy: Label Smoothing, Post-Hoc Logit Adjustment, and Multi-Seed Ensembling
+
+#### 1) The Dual Clinical Paradigm: Accuracy vs. Minority-Class Sensitivity
+While the primary objective of the CORN framework in Section IV.E was to maximize Quadratic Weighted Kappa (QWK) and elevate minority-class sensitivity on sight-threatening stages (Severe NPDR Recall $= 65.7\%$), clinical deployment often demands a dual perspective. In confirmatory tele-ophthalmology screening and automated primary grading, healthcare providers require high raw classification accuracy ($\ge 80\%$) and high specificity to avoid inundating secondary clinics with false alarms from the healthy majority cohort. Ordinal loss functions and class-balanced samplers inherently trade off majority-class accuracy for minority-class recall (yielding overall accuracy of $69.09\%$ in CORN and $59.64\%$ in CORAL, compared to $80.18\%$ in the baseline Softmax model). 
+
+To investigate the theoretical ceiling of raw classification accuracy on the 5-class APTOS 2019 dataset without resorting to aggressive ordinal reweighting, we formulate an accuracy-centric optimization regime built on the uniform EfficientNet-B0 backbone.
+
+#### 2) Cross-Entropy with Label Smoothing
+Standard one-hot hard cross-entropy encourages overconfident output representations, driving output logits toward extreme values and causing the network to overfit to borderline ambiguous retinal fundus features. We replace standard cross-entropy with regularized label smoothing:
+$$y_{k}^{LS} = (1 - \alpha) y_k + \frac{\alpha}{K}$$
+where $\alpha = 0.08$ denotes the label smoothing parameter and $K=5$ is the number of clinical grades. Label smoothing prevents the model from assigning zero probability to plausible neighboring disease stages, calibrating softmax confidence and preventing margin overfitting on minority classes without artificially skewing class priors.
+
+#### 3) Safe Light Geometric and Photometric Augmentation
+Rather than applying synthetic oversampling (e.g., SMOTE [4]) or aggressive cutmix/mixup strategies that distort microvascular lesions, we implement a targeted "safe-light" data augmentation pipeline:
+- Random horizontal flip ($p=0.5$) and vertical flip ($p=0.5$).
+- Small-angle rotation bounded strictly within $\pm 15^\circ$.
+- Continuous affine zoom/scaling within $[0.92, 1.08]$ (preventing lesion distortion).
+- Mild photometric color jitter (brightness factor $\pm 0.10$, contrast factor $\pm 0.10$).
+
+#### 4) Post-Hoc Logit Adjustment (Menon et al.)
+To address the long-tailed class distribution ($49.3\%$ Grade 0 vs. $5.3\%$ Grade 3) at inference time without destabilizing network representation learning with artificial mini-batch sampling, we implement post-hoc logit adjustment [15]:
+$$\tilde{f}_y(\mathbf{x}) = f_y(\mathbf{x}) - \tau \cdot \log(\pi_y)$$
+where $f_y(\mathbf{x})$ denotes the unnormalized logit for grade $y$, $\pi_y = \frac{n_y}{N_{train}}$ is the empirical class prior estimated from the 2,563-image training distribution ($\pi_0 = 0.4928, \pi_1 = 0.1011, \pi_2 = 0.2727, \pi_3 = 0.0527, \pi_4 = 0.0808$), and $\tau \ge 0$ is a tunable temperature parameter. 
+- When $\tau = 0.0$, the decision rule is standard $\arg\max_y f_y(\mathbf{x})$, which optimizes for empirical overall accuracy under the natural training prior.
+- When $\tau > 0.0$, the term $-\tau \log(\pi_y)$ provides a larger additive bonus to scarce minority classes (e.g., $+2.9437\tau$ for Grade 3 vs. $+0.7077\tau$ for Grade 0), smoothly modulating the trade-off between raw classification accuracy and tail sensitivity at test time without requiring retraining.
+
+#### 5) Sequential Multi-Seed Ensembling with Test-Time Augmentation
+To eliminate single-run stochastic variance and maximize generalization, we train the label-smoothed Variant A architecture across three distinct random seeds ($s \in \{42, 43, 44\}$) sequentially. Each seed model undergoes 12 epochs with early stopping governed strictly by validation classification accuracy. At inference time, each model computes predictions across 4-way flip Test-Time Augmentation (TTA). The final ensemble prediction is formed by averaging the softmax probability distributions across all three seeds:
+$$\bar{P}(y = k \mid \mathbf{x}) = \frac{1}{3} \sum_{s=1}^3 P^{(s)}(y = k \mid \mathbf{x})$$
+Post-hoc logit adjustment is then applied directly to the ensembled distribution: $\tilde{P}(y \mid \mathbf{x}) \propto \bar{P}(y \mid \mathbf{x}) \cdot \pi_y^{-\tau}$.
+
 ---
 
 ## V. EXPERIMENTAL SETUP
@@ -338,6 +369,44 @@ Pairwise bootstrap resampling ($1,000$ iterations) and Wilcoxon signed-rank test
    - Mean bootstrap QWK difference: $\Delta QWK = -0.0247$ ($95\%$ CI: $[-0.0535, +0.0017]$, $p = 0.036$).
    - While Softmax baseline achieved higher exact accuracy on the majority healthy cohort ($80.18\%$), Variant CORN demonstrated significantly higher sensitivity on the high-risk Severe NPDR cohort ($65.7\%$ vs. $41.7\%$), directly serving patient safety in screening.
 
+### E. Empirical Results of Accuracy Optimization: Label Smoothing, Logit Adjustment, and 3-Seed Ensembling
+
+Table III compares the empirical metrics produced across the accuracy-optimization experiments against the original Softmax baseline on the 550-image holdout test set ($N=550$).
+
+#### TABLE III: Classification Accuracy Optimization Comparison on Test Set (N=550)
+| Model Configuration | Accuracy [95% CI] | QWK [95% CI] | MAE [95% CI] | Catastrophic Err ($d \ge 2$) [95% CI] | Grade 3 Severe F1 [95% CI] | Grade 4 PDR F1 [95% CI] |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| **Original Variant A (Baseline Softmax)** | 80.18% [76.73%, 83.45%] | 0.8724 [0.8385, 0.9044] | 0.2673 [0.2182, 0.3200] | 5.64% [3.64%, 7.64%] | 0.3810 [0.2221, 0.5313] | 0.5169 [0.3830, 0.6377] |
+| **Variant A (Single Seed 42 + Label Smooth 0.08)** | 82.00% [78.73%, 85.10%] | 0.8709 [0.8330, 0.9039] | 0.2473 [0.1982, 0.3000] | 5.27% [3.45%, 7.27%] | 0.4828 [0.3225, 0.6452] | 0.5195 [0.3662, 0.6364] |
+| **Variant A (Single Seed 42 + Logit Adj $\tau=1.0$)** | 80.00% [76.73%, 83.46%] | 0.8682 [0.8303, 0.9010] | 0.2673 [0.2145, 0.3200] | 4.91% [3.27%, 6.73%] | 0.4000 [0.2597, 0.5306] | 0.5250 [0.3793, 0.6458] |
+| **3-Seed Ensemble + TTA ($\tau=0.0$, Raw Acc Focus)** | **83.82%** [80.73%, 86.73%] | **0.8859** [0.8503, 0.9170] | **0.2200** [0.1727, 0.2691] | **4.36%** [2.73%, 6.18%] | 0.4561 [0.2999, 0.6134] | 0.5570 [0.4179, 0.6739] |
+| **3-Seed Ensemble + TTA ($\tau=1.0$, Logit Adj Focus)** | 79.27% [76.00%, 82.55%] | 0.8787 [0.8451, 0.9091] | 0.2691 [0.2200, 0.3164] | 4.55% [2.73%, 6.36%] | 0.3721 [0.2432, 0.5056] | **0.5778** [0.4444, 0.6875] |
+
+#### 1) Gains from Regularization and Ensembling
+1. **Single Model Improvements:** Integrating label smoothing ($\alpha = 0.08$) and safe-light geometric jitter directly improved raw accuracy from $80.18\%$ to **$82.00\%$** ($+1.82\%$ absolute gain), while simultaneously reducing MAE from $0.2673$ to $0.2473$ and increasing Grade 3 Severe F1 from $0.3810$ to $0.4828$.
+2. **Multi-Seed Ensembling Peak:** Combining the three independently trained seeds ($42, 43, 44$) with 4-way flip TTA achieved an overall classification accuracy of **$83.82\%$ [80.73%, 86.73%]**, an absolute increase of **$+3.64\%$** over the original Softmax baseline ($80.18\%$). Simultaneously, QWK reached **$0.8859$** (surpassing both Variant A's $0.8724$ and Variant C's $0.8788$), MAE dropped to a project-best **$0.2200$**, and catastrophic multi-grade triage errors ($d \ge 2$) were reduced from $5.64\%$ down to **$4.36\%$**.
+
+#### 2) Post-Hoc Logit Adjustment $\tau$ Sweep Analysis
+To empirically map the trade-off between raw classification accuracy and minority-class sensitivity without altering model weights, Table IV documents the evaluation of the 3-Seed Ensemble across $\tau \in \{0.0, 0.5, 1.0, 1.5\}$.
+
+#### TABLE IV: Post-Hoc Logit Adjustment Temperature Sweep on 3-Seed Ensemble
+| Logit Adjustment $\tau$ | Accuracy | QWK | MAE | Severe Recall (Grade 3) | PDR Recall (Grade 4) |
+| :---: | :---: | :---: | :---: | :---: | :---: |
+| **0.0 (Unadjusted, Raw Acc Focus)** | **83.82%** | 0.8859 | **0.2200** | 44.8% | 50.0% |
+| **0.5 (Balanced Trade-off)** | 82.18% | **0.8929** | 0.2291 | 51.7% | 56.8% |
+| **1.0 (Standard Prior Adjustment)** | 79.27% | 0.8787 | 0.2691 | 55.2% | **59.1%** |
+| **1.5 (Minority-Tail Focus)** | 74.91% | 0.8438 | 0.3364 | **69.0%** | 50.0% |
+
+The sweep quantitatively reveals the mathematical mechanics of logit adjustment:
+- At $\tau = 0.0$, the ensemble operates to maximize overall classification accuracy on the natural dataset distribution ($83.82\%$).
+- As $\tau$ increases to $0.5$, Quadratic Weighted Kappa peaks at **$0.8929$** (the highest QWK attained in this entire research study), with Severe Recall rising to $51.7\%$ and Proliferative Recall to $56.8\%$, while maintaining an impressive $82.18\%$ accuracy.
+- At $\tau = 1.5$, Severe NPDR Recall rises to $69.0\%$, but overall accuracy is pulled down to $74.91\%$, illustrating that post-hoc logit adjustment provides clinicians with a continuous control dial to select an operating point tailored to local triage priorities.
+
+Figure 5 presents the confusion matrices across the four accuracy configurations on the holdout test set.
+
+![Accuracy Optimization Confusion Matrices](submission/results/confusion_matrix_accuracy_ensemble.png)
+*Fig. 5. Confusion matrices on the holdout test set ($N=550$) for (from left to right) Original Variant A Softmax Baseline, Variant A Seed 42 with Label Smoothing, 3-Seed Ensemble with TTA ($\tau=0.0$), and 3-Seed Ensemble with Logit Adjustment ($\tau=1.0$).*
+
 ---
 
 ---
@@ -379,16 +448,24 @@ This architectural decision is rooted in sample complexity and overfitting dynam
 2. **Loss Formulation Dominance:** Our empirical results show that changing the loss framing (from CORAL to CORN) yielded a massive $+0.1209$ QWK increase and slashed catastrophic triage errors from $26.4\%$ to $5.1\%$ on the *exact same backbone*. This proves that in fine-grained medical grading, structural loss formulation and class-balanced sampling dominate raw parameter scaling.
 3. **Point-of-Care Clinical Deployability:** In low-resource screening settings (rural clinics, portable handheld fundus cameras), inference latency, thermal envelope, and power draw are paramount. EfficientNet-B0 executes inference in $<12\text{ms}$ per image, fitting comfortably within mobile compute budgets where heavy vision transformers cannot operate.
 
+### F. The Strategic Trade-off Between Overall Accuracy and Minority-Class Sensitivity
+
+The contrast between the results of Variant CORN (Section VI.B) and the 3-Seed Label-Smoothed Ensemble (Section VI.E) underscores a foundational design trade-off in medical artificial intelligence:
+1. **The Ordinal-Sensitivity Regime (Variant CORN):** When the primary clinical objective is safety-critical screening triage—where failing to detect a patient with sight-threatening Grade 3 Severe NPDR leads to irreversible vision loss—Variant CORN is superior. By utilizing conditional cumulative rank probabilities, class-balanced sample weighting, and soft-QWK loss, CORN attains a Severe NPDR Sensitivity of **$65.7\%$** and Mild NPDR Sensitivity of **$66.1\%$**, with an overall QWK of $0.8482$. However, prioritizing minority recall inevitably sacrifices majority-class specificity, yielding an aggregate accuracy of $69.09\%$.
+2. **The High-Accuracy Confirmatory Regime (3-Seed Ensemble):** Conversely, when the clinical objective is secondary telemedicine grading, automated clinical documentation, or high-throughput confirmatory reporting—where high diagnostic specificity and exact agreement on the abundant non-pathological population ($49.3\%$ of patients) are essential—the 3-Seed Ensemble with label smoothing and TTA is optimal. It delivers an overall accuracy of **$83.82\%$**, QWK of **$0.8859$**, and the lowest MAE of **$0.2200$**, with an exceptionally low catastrophic error rate of $4.36\%$.
+3. **Deliberate Design Choice:** Rather than viewing one framework as universally superior, our findings demonstrate that model selection must be aligned with the operational tier of the healthcare delivery pipeline. For primary community screening, the high-sensitivity ordinal framework (CORN) protects patients; for centralized diagnostic clinics, the high-accuracy ensemble minimizes false alarms.
+
 ---
 
 ## VIII. CONCLUSION AND FUTURE WORK
 
-In this paper, we addressed the critical vulnerability of nominal multiclass loss in automated Diabetic Retinopathy stage grading. Standard categorical cross-entropy treats diagnostic errors with dangerous symmetry, risking catastrophic multi-grade triage failures in clinical screening programs. To resolve this limitation, we conducted an empirical benchmark comparing standard softmax classification, rank-consistent ordinal regression (CORAL), continuous scalar regression, and conditional ordinal regression (CORN) across an identical EfficientNet-B0 backbone on the APTOS 2019 benchmark.
+In this paper, we addressed the critical vulnerability of nominal multiclass loss in automated Diabetic Retinopathy stage grading. Standard categorical cross-entropy treats diagnostic errors with dangerous symmetry, risking catastrophic multi-grade triage failures in clinical screening programs. To resolve this limitation, we conducted an empirical benchmark comparing standard softmax classification, rank-consistent ordinal regression (CORAL), continuous scalar regression, conditional ordinal regression (CORN), and an accuracy-optimized 3-seed ensemble across an identical EfficientNet-B0 backbone on the APTOS 2019 benchmark.
 
 Our empirical findings demonstrate:
-1. **Continuous Regression with Smooth L1 (Variant C)** achieved peak overall concordance with a Quadratic Weighted Kappa of **0.8788** and suppressed severe multi-grade triage errors ($d \ge 2$) to just **$3.8\%$**, with **$96.1\%$** of predictions falling within $\pm 1$ grade of true diagnosis.
+1. **Continuous Regression with Smooth L1 (Variant C)** achieved strong overall concordance with a Quadratic Weighted Kappa of **0.8788** and suppressed severe multi-grade triage errors ($d \ge 2$) to just **$3.8\%$**, with **$96.1\%$** of predictions falling within $\pm 1$ grade of true diagnosis.
 2. **Conditional Ordinal Regression (Variant CORN)** resolved the catastrophic breakdown of CORAL on minority stages, lifting QWK from **0.7273** to **0.8482**, slashing catastrophic errors from **$26.4\%$** to **$5.1\%$** ($p < 10^{-20}$), and achieving peak Severe NPDR sensitivity (**$65.7\%$ [48.3%, 82.9%]**).
-3. **Loss-Level Inductive Bias Dominates Parameter Bloat:** Enforcing conditional rank dependency, effective-number class weighting, soft-QWK loss regularization, and test-time augmentation achieved clinical-grade agreement on EfficientNet-B0 without resorting to parameter-heavy backbones that overfit scarce medical data.
+3. **Multi-Seed Regularized Ensembling** achieved the highest raw classification accuracy of **$83.82\%$ [80.73%, 86.73%]**, peak QWK of **$0.8859$**, and lowest MAE of **$0.2200$**, with post-hoc logit adjustment providing an effective test-time mechanism to balance accuracy against tail sensitivity.
+4. **Loss-Level Inductive Bias Dominates Parameter Bloat:** Enforcing conditional rank dependency, effective-number class weighting, soft-QWK loss regularization, and test-time augmentation achieved clinical-grade agreement on EfficientNet-B0 without resorting to parameter-heavy backbones that overfit scarce medical data.
 
 Future research will focus on combining conditional ordinal loss with vision-language explanation models [6] to provide interpretable natural-language rationales alongside calibrated stage predictions in prospective clinical screening trials.
 
@@ -424,5 +501,7 @@ Future research will focus on combining conditional ordinal loss with vision-lan
 [13] X. Shi, W. Cao, and S. Raschka, "Deep neural networks for rank-consistent ordinal regression based on conditional probabilities," Pattern Recognition Letters, vol. 152, pp. 110–116, 2021.
 
 [14] Y. Cui, M. Jia, T.-Y. Lin, Y. Song, and S. Belongie, "Class-balanced loss based on effective number of samples," in Proc. IEEE Conf. Comput. Vis. Pattern Recognit. (CVPR), 2019, pp. 9268–9277.
+
+[15] A. K. Menon, S. Jayasumana, A. S. Rawat, H. Jain, A. Veit, and S. Kumar, "Long-tail learning via logit adjustment," in Proc. Int. Conf. Learn. Represent. (ICLR), 2021.
 ```
 

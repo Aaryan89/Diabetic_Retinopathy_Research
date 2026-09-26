@@ -123,10 +123,46 @@ class DRModel(nn.Module):
         out = self.head(features)
         return out
 
-    def predict(self, x, use_tta=False):
+    def get_probabilities(self, x, use_tta=False, logit_adj_tau=0.0, class_priors=None):
+        """
+        Returns class probabilities (shape: batch_size, num_classes).
+        Supports Test-Time Augmentation (TTA) and post-hoc logit adjustment (Menon et al., 2021).
+        """
+        self.eval()
+        with torch.no_grad():
+            if use_tta:
+                transforms_list = [
+                    lambda t: t,
+                    lambda t: torch.flip(t, dims=[3]),
+                    lambda t: torch.flip(t, dims=[2]),
+                    lambda t: torch.flip(t, dims=[2, 3])
+                ]
+                raw_outs = [self.forward(fn(x)) for fn in transforms_list]
+                raw_out = torch.stack(raw_outs, dim=0).mean(dim=0)
+            else:
+                raw_out = self.forward(x)
+
+            if self.variant == 'variant_A':
+                if logit_adj_tau > 0.0 and class_priors is not None:
+                    priors = class_priors.to(raw_out.device)
+                    raw_out = raw_out - logit_adj_tau * torch.log(priors + 1e-8)
+                probs = torch.softmax(raw_out, dim=1)
+                return probs
+            elif self.variant in ['variant_CORN', 'variant_corn']:
+                probs, _ = corn_predict_probs(raw_out)
+                return probs
+            elif self.variant == 'variant_B':
+                sigmoids = torch.sigmoid(raw_out)
+                return sigmoids
+            elif self.variant == 'variant_C':
+                clamped = torch.clamp(raw_out.squeeze(-1), 0.0, float(self.num_classes - 1))
+                return clamped
+
+    def predict(self, x, use_tta=False, logit_adj_tau=0.0, class_priors=None):
         """
         Inference prediction returning (predicted_class_label, raw_outputs).
-        Supports Test-Time Augmentation (TTA) via horizontal and vertical flips.
+        Supports Test-Time Augmentation (TTA) via horizontal and vertical flips,
+        and post-hoc logit adjustment (Menon et al. 2021) for Variant A.
         """
         self.eval()
         with torch.no_grad():
@@ -144,8 +180,13 @@ class DRModel(nn.Module):
                 raw_out = self.forward(x)
 
             if self.variant == 'variant_A':
-                # Softmax probabilities -> argmax
-                probs = torch.softmax(raw_out, dim=1)
+                # Optional post-hoc logit adjustment: raw_out - tau * log(class_prior)
+                if logit_adj_tau > 0.0 and class_priors is not None:
+                    priors = class_priors.to(raw_out.device)
+                    adj_logits = raw_out - logit_adj_tau * torch.log(priors + 1e-8)
+                else:
+                    adj_logits = raw_out
+                probs = torch.softmax(adj_logits, dim=1)
                 preds = torch.argmax(probs, dim=1)
                 return preds, raw_out
             elif self.variant == 'variant_B':

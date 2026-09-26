@@ -88,11 +88,12 @@ class APTOSDataset(Dataset):
     PyTorch Dataset for APTOS 2019 Diabetic Retinopathy Fundus Images.
     Supports fast loading from disk cache with on-the-fly train augmentation.
     """
-    def __init__(self, df, data_dir, is_train=False, target_size=(224, 224)):
+    def __init__(self, df, data_dir, is_train=False, target_size=(224, 224), aug_mode='standard'):
         self.df = df.reset_index(drop=True)
         self.data_dir = data_dir
         self.is_train = is_train
         self.target_size = target_size
+        self.aug_mode = aug_mode
         self.cache_dir = os.path.join(data_dir, "preprocessed_224")
 
         self.normalize = transforms.Normalize(
@@ -101,14 +102,26 @@ class APTOSDataset(Dataset):
         )
 
         if self.is_train:
-            self.aug = transforms.Compose([
-                transforms.RandomHorizontalFlip(p=0.5),
-                transforms.RandomVerticalFlip(p=0.5),
-                transforms.RandomRotation(degrees=25),
-                transforms.ColorJitter(brightness=0.15, contrast=0.15, saturation=0.1),
-                transforms.ToTensor(),
-                self.normalize
-            ])
+            if aug_mode == 'safe_light':
+                # Light, safe data augmentation specifically targeted for raw classification accuracy:
+                # Small-angle rotation (+/-15 deg), zoom (0.92 - 1.08), mild color jitter (0.1, 0.1)
+                self.aug = transforms.Compose([
+                    transforms.RandomHorizontalFlip(p=0.5),
+                    transforms.RandomVerticalFlip(p=0.5),
+                    transforms.RandomAffine(degrees=15, scale=(0.92, 1.08)),
+                    transforms.ColorJitter(brightness=0.10, contrast=0.10),
+                    transforms.ToTensor(),
+                    self.normalize
+                ])
+            else:
+                self.aug = transforms.Compose([
+                    transforms.RandomHorizontalFlip(p=0.5),
+                    transforms.RandomVerticalFlip(p=0.5),
+                    transforms.RandomRotation(degrees=25),
+                    transforms.ColorJitter(brightness=0.15, contrast=0.15, saturation=0.1),
+                    transforms.ToTensor(),
+                    self.normalize
+                ])
         else:
             self.aug = transforms.Compose([
                 transforms.ToTensor(),
@@ -175,11 +188,12 @@ def get_dataloaders(data_dir=os.path.join(".", "data", "aptos2019"),
                     num_workers=0,
                     seed=GLOBAL_SEED,
                     use_weighted_sampler=False,
-                    beta=0.9999):
+                    beta=0.9999,
+                    aug_mode='standard'):
     csv_path = os.path.join(data_dir, "train.csv")
     train_df, val_df, test_df = get_stratified_splits(csv_path, seed=seed)
 
-    train_dataset = APTOSDataset(train_df, data_dir, is_train=True)
+    train_dataset = APTOSDataset(train_df, data_dir, is_train=True, aug_mode=aug_mode)
     val_dataset   = APTOSDataset(val_df, data_dir, is_train=False)
     test_dataset  = APTOSDataset(test_df, data_dir, is_train=False)
 
