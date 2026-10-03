@@ -139,7 +139,25 @@ def convert_markdown_to_docx(md_path, docx_path, base_image_dir="."):
                 p_img.paragraph_format.space_before = Pt(8)
                 p_img.paragraph_format.space_after = Pt(3)
                 run_img = p_img.add_run()
-                run_img.add_picture(img_full_path, width=Inches(5.5))
+                
+                # Proportional image scaling to prevent oversized diagrams
+                img_name = os.path.basename(img_full_path).lower()
+                if "uml_activity" in img_name:
+                    pic_width = Inches(5.0)
+                elif "class_distribution" in img_name or "error_distance" in img_name:
+                    pic_width = Inches(4.8)
+                elif "sample_images" in img_name:
+                    pic_width = Inches(5.2)
+                elif "all_confusion" in img_name or "confusion_matrix" in img_name:
+                    pic_width = Inches(5.4)
+                elif "system_architecture" in img_name:
+                    pic_width = Inches(5.3)
+                elif "uml_class" in img_name:
+                    pic_width = Inches(5.4)
+                else:
+                    pic_width = Inches(5.0)
+                    
+                run_img.add_picture(img_full_path, width=pic_width)
 
                 p_cap = doc.add_paragraph()
                 p_cap.alignment = WD_ALIGN_PARAGRAPH.CENTER
