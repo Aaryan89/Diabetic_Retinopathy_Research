@@ -1,18 +1,18 @@
 # Ordinal Neural Networks for Diabetic Retinopathy Staging: Enforcing Monotonic Rank Consistency for Safety-Critical Clinical Decision Support
 
 > **Institution:** Department of Computer Science and Engineering, MIT World Peace University, Pune  
-> **Course:** Artificial Intelligence & Expert Systems Lab (AIESL)  
-> **Academic Year:** 2025–2026  
-> **Project Mentor:** [ACTION REQUIRED: Enter Project Mentor Name, Designation, and Department before submission]  
+> **Course:** Artificial Intelligence & Expert Systems Laboratory (CSE30070)
+> **Academic Year:** 2026–2027  
+> **Project Mentor:** Prof. Pramod Mali
 
 ### Project Team Members
 
 | Sr. No. | PRN | Student Name |
 | :---: | :---: | :---: |
-| 1 | [ACTION REQUIRED: PRN] | [ACTION REQUIRED: Enter Student 1 Full Name] |
-| 2 | [ACTION REQUIRED: PRN] | [ACTION REQUIRED: Enter Student 2 Full Name] |
-| 3 | [ACTION REQUIRED: PRN] | [ACTION REQUIRED: Enter Student 3 Full Name] |
-| 4 | [ACTION REQUIRED: PRN] | [ACTION REQUIRED: Enter Student 4 Full Name] |
+| 1 | 1262241524 | Nayna Sharma |
+| 2 | 1262241534 | Harshad Pardhi |
+| 3 | 1262241729 | Aaryan Kumbhare |
+| 4 | 1262241775 | Anurag Harapanahalli |
 
 ---
 
