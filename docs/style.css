@@ -1,0 +1,271 @@
+:root {
+    --primary-color: #5B9CDE;
+    --text-main: #E4E4E4;
+    --text-muted: #A0A0A0;
+    --bg-main: #121212;
+    --bg-sidebar: #1A1A1A;
+    --border-color: #333333;
+    --highlight-bg: #222222;
+    --highlight-box-bg: #15222E;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: var(--text-main);
+    line-height: 1.6;
+    background-color: var(--bg-main);
+    display: flex;
+    min-height: 100vh;
+}
+
+/* Sidebar */
+.sidebar {
+    width: 280px;
+    background-color: var(--bg-sidebar);
+    border-right: 1px solid var(--border-color);
+    padding: 2rem 1.5rem;
+    position: fixed;
+    height: 100vh;
+    overflow-y: auto;
+}
+
+.sidebar h2 {
+    font-size: 1.2rem;
+    color: var(--primary-color);
+    margin-bottom: 1.5rem;
+    font-weight: 700;
+}
+
+.nav-links {
+    list-style: none;
+}
+
+.nav-links li {
+    margin-bottom: 0.8rem;
+}
+
+.nav-links a {
+    text-decoration: none;
+    color: var(--text-main);
+    font-size: 0.95rem;
+    font-weight: 500;
+    display: block;
+    padding: 0.5rem;
+    border-radius: 4px;
+    transition: background-color 0.2s, color 0.2s;
+}
+
+.nav-links a:hover {
+    background-color: var(--highlight-bg);
+    color: var(--primary-color);
+}
+
+.team-info {
+    margin-top: 2rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--border-color);
+    font-size: 0.85rem;
+    color: var(--text-muted);
+}
+
+.team-info strong {
+    color: var(--text-main);
+}
+
+/* Main Content */
+.main-content {
+    margin-left: 280px;
+    padding: 3rem 4rem;
+    max-width: 1000px;
+    width: 100%;
+}
+
+.header h1 {
+    font-size: 2.2rem;
+    color: var(--primary-color);
+    margin-bottom: 0.5rem;
+    line-height: 1.3;
+}
+
+.header .subtitle {
+    font-size: 1.2rem;
+    color: var(--text-muted);
+    font-weight: 400;
+    margin-bottom: 2rem;
+}
+
+section {
+    margin-bottom: 4rem;
+    padding-top: 1rem;
+}
+
+h2.section-title {
+    font-size: 1.7rem;
+    color: var(--primary-color);
+    border-bottom: 2px solid var(--highlight-bg);
+    padding-bottom: 0.5rem;
+    margin-bottom: 1.5rem;
+}
+
+h3 {
+    font-size: 1.2rem;
+    margin-top: 1.5rem;
+    margin-bottom: 1rem;
+    color: var(--text-main);
+}
+
+p {
+    margin-bottom: 1rem;
+}
+
+ul {
+    margin-left: 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+li {
+    margin-bottom: 0.5rem;
+}
+
+/* Images */
+.img-container {
+    margin: 2rem 0;
+    text-align: center;
+}
+
+.img-container img {
+    max-width: 100%;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+    background-color: #ffffff; /* Gives a crisp white frame for diagrams exported with transparent backgrounds */
+    padding: 0.5rem;
+}
+
+.img-caption {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    margin-top: 0.5rem;
+    font-style: italic;
+}
+
+/* Tables */
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 2rem 0;
+    font-size: 0.95rem;
+}
+
+th, td {
+    padding: 12px 15px;
+    border-bottom: 1px solid var(--border-color);
+    text-align: center;
+}
+
+th {
+    background-color: var(--highlight-box-bg);
+    color: var(--primary-color);
+    font-weight: 600;
+    border-bottom: 2px solid var(--border-color);
+}
+
+th:first-child, td:first-child {
+    text-align: left;
+}
+
+tr:hover {
+    background-color: var(--highlight-bg);
+}
+
+/* Math blocks */
+.math-block {
+    background-color: var(--highlight-bg);
+    padding: 1.5rem;
+    border-radius: 6px;
+    text-align: center;
+    font-family: "Courier New", Courier, monospace;
+    font-size: 1.1rem;
+    font-weight: bold;
+    margin: 1.5rem 0;
+    overflow-x: auto;
+    color: var(--primary-color);
+}
+
+.highlight-box {
+    background-color: var(--highlight-box-bg);
+    border-left: 4px solid var(--primary-color);
+    padding: 1rem 1.5rem;
+    margin: 1.5rem 0;
+    border-radius: 0 4px 4px 0;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    body {
+        flex-direction: column;
+    }
+    
+    .sidebar {
+        width: 100%;
+        height: auto;
+        position: static;
+        border-right: none;
+        border-bottom: 1px solid var(--border-color);
+        padding: 1.5rem;
+    }
+
+    .main-content {
+        margin-left: 0;
+        padding: 2rem 1.5rem;
+    }
+}
+
+/* Download Section */
+.download-section {
+    margin-top: 4rem;
+    padding-top: 2rem;
+    border-top: 1px solid var(--border-color);
+    text-align: center;
+}
+
+.btn-container {
+    display: flex;
+    justify-content: center;
+    gap: 1rem;
+    margin-top: 1.5rem;
+    flex-wrap: wrap;
+}
+
+.btn {
+    display: inline-block;
+    padding: 0.8rem 1.5rem;
+    background-color: var(--primary-color);
+    color: #ffffff !important;
+    text-decoration: none;
+    font-weight: 600;
+    border-radius: 6px;
+    transition: background-color 0.2s, transform 0.1s;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+}
+
+.btn:hover {
+    background-color: #4A89C7;
+    transform: translateY(-2px);
+}
+
+.btn-outline {
+    background-color: transparent;
+    color: var(--primary-color) !important;
+    border: 2px solid var(--primary-color);
+}
+
+.btn-outline:hover {
+    background-color: var(--highlight-box-bg);
+}

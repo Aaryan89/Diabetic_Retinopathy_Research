@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ordinal Neural Networks for DR Staging</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar">
+        <h2>AIESL Project</h2>
+        <ul class="nav-links">
+            <li><a href="#problem">Problem Statement</a></li>
+            <li><a href="#models">Trained Models</a></li>
+            <li><a href="#results">Results & Comparison</a></li>
+            <li><a href="#conclusion">Conclusions</a></li>
+            <li><a href="#future">Future Scope</a></li>
+        </ul>
+
+        <div class="team-info">
+            <strong>Team Members:</strong>
+            <br>Nayna Sharma
+            <br>Harshad Pardhi
+            <br>Aaryan Kumbhare
+            <br>Anurag Harapanahalli
+            <br><br>
+            <strong>Mentor:</strong> Prof. Pramod Mali
+            <br><strong>Course:</strong> CSE30070
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        
+        <header class="header">
+            <h1>Ordinal Neural Networks for Diabetic Retinopathy Staging</h1>
+            <p class="subtitle">Enforcing Monotonic Rank Consistency for Safety-Critical Clinical Decision Support</p>
+        </header>
+
+        <!-- Problem Statement -->
+        <section id="problem">
+            <h2 class="section-title">Problem Statement</h2>
+            <p>Diabetic Retinopathy (DR) grading is a safety-critical classification task where standard neural network loss functions fail to capture the ordinal severity of the disease. The 5-point International Clinical Diabetic Retinopathy (ICDR) scale consists of: Grade 0 (No DR), Grade 1 (Mild NPDR), Grade 2 (Moderate NPDR), Grade 3 (Severe NPDR), and Grade 4 (Proliferative DR).</p>
+            
+            <div class="highlight-box">
+                <strong>The Metric Blindness of Softmax:</strong><br>
+                In a clinical setting, confusing vision-threatening Proliferative DR (Grade 4) with Severe NPDR (Grade 3) is a minor triage error, but confusing it with No DR (Grade 0) is a catastrophic failure that could result in irreversible blindness. However, standard categorical cross-entropy treats all these errors with the exact same numerical penalty.
+            </div>
+
+            <p>Our objective is to implement and evaluate distance-aware, rank-consistent ordinal formulations on the APTOS 2019 Blindness Detection dataset (3,662 retinal images) using a lightweight EfficientNet-B0 backbone. We aim to strictly penalize catastrophic multi-grade misclassifications and ensure patient safety.</p>
+
+            <div class="img-container">
+                <img src="assets/images/system_architecture.png" alt="System Architecture">
+                <p class="img-caption">Fig 1: End-to-End System Architecture Diagram.</p>
+            </div>
+        </section>
+
+        <!-- Trained Models -->
+        <section id="models">
+            <h2 class="section-title">Trained Models & Methodology</h2>
+            <p>We evaluated four distinct paradigms under strictly controlled, identical conditions on a mobile NVIDIA GeForce RTX 5050 GPU (allocating &lt;540 MiB VRAM).</p>
+
+            <h3>Variant A: Nominal Softmax Baseline</h3>
+            <p>Trained using standard cross-entropy. It optimizes independent nominal probabilities without any concept of rank. The loss gradient is symmetric with respect to all non-target classes.</p>
+            <div class="math-block">
+                L<sub>CE</sub> = − ∑ y<sub>k</sub> log(p̂<sub>k</sub>)
+            </div>
+
+            <h3>Variant B: Consistent Rank Logits (CORAL)</h3>
+            <p>Reformulates the 5-class ordinal problem into 4 binary classification subproblems. However, we found that on highly imbalanced medical data, the overwhelming flood of negative gradients from healthy retinas dominates the shared projection vector, crushing the decision intervals for minority classes like Grade 3 Severe NPDR.</p>
+
+            <h3>Variant C: Continuous Regression</h3>
+            <p>Maps the embedding directly to a continuous scalar prediction, trained with Smooth L1 Loss. At test time, the scalar is rounded. This method strictly penalizes large distance errors quadratically but can overly compress predictions toward the mean.</p>
+
+            <h3>Variant D: Conditional Ordinal Regression for Neural Networks (CORN)</h3>
+            <p>Instead of predicting unconditioned probabilities, CORN models the step-by-step conditional probability of exceeding rank k, given that the previous rank was already reached. Crucially, a healthy patient updates only the first task, protecting minority classes.</p>
+            <div class="math-block">
+                L<sub>CORN</sub>(x, y) = [ − 1 / min(y + 1, K − 1) ] ∑ BCE( g<sub>k</sub>(x), 𝕀(y > k) )
+            </div>
+            
+            <p>We combine this with a <strong>Differentiable Soft-QWK Loss</strong> to align training directly with our target clinical metric (Quadratic Weighted Kappa):</p>
+            <div class="math-block">
+                Total Loss = L<sub>CORN</sub> + λ · L<sub>SoftQWK</sub>
+            </div>
+        </section>
+
+        <!-- Results & Comparison -->
+        <section id="results">
+            <h2 class="section-title">Outputs, Results & Comparison</h2>
+            <p>All models were evaluated on a locked holdout test set of 550 images.</p>
+
+            <h3>Key Breakthroughs</h3>
+            <ul>
+                <li><strong>Resolution of Minority-Stage Collapse:</strong> Our Variant D (CORN) framework elevated Severe NPDR (Grade 3) sensitivity to <strong>65.7%</strong> (compared to 0.0% in unweighted CORAL).</li>
+                <li><strong>Catastrophic Error Reduction:</strong> Multi-grade triage errors (|y - ŷ| ≥ 2) were slashed by 80.7% down to just <strong>5.1%</strong> in Variant D.</li>
+                <li><strong>High-Accuracy Confirmatory Pipeline:</strong> An accuracy-optimized 3-seed ensemble (with label smoothing and test-time augmentation) achieved a raw classification accuracy of <strong>83.82%</strong> and a peak QWK of <strong>0.8929</strong> using post-hoc logit adjustment.</li>
+            </ul>
+
+            <div class="img-container">
+                <img src="assets/images/all_confusion_matrices.png" alt="Confusion Matrices">
+                <p class="img-caption">Fig 2: Side-by-Side Confusion Matrices comparing the 4 variants.</p>
+            </div>
+
+            <div class="img-container">
+                <img src="assets/images/error_distance_histogram.png" alt="Error Distance Histogram">
+                <p class="img-caption">Fig 3: Prediction Error Distance Distribution showing the elimination of severe off-by-3 and off-by-4 errors in Variant D.</p>
+            </div>
+
+            <h3>Performance Comparison Table</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Model Variant</th>
+                        <th>QWK [95% CI]</th>
+                        <th>Accuracy (%)</th>
+                        <th>Catastrophic Err (d ≥ 2)</th>
+                        <th>PDR F1 (Grade 4)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>A: Softmax Baseline</strong></td>
+                        <td>0.8724</td>
+                        <td>80.18%</td>
+                        <td>5.6%</td>
+                        <td>0.5147</td>
+                    </tr>
+                    <tr>
+                        <td><strong>B: CORAL Ordinal</strong></td>
+                        <td>0.7273</td>
+                        <td>59.64%</td>
+                        <td>26.4%</td>
+                        <td>0.3692</td>
+                    </tr>
+                    <tr>
+                        <td><strong>C: Continuous Reg</strong></td>
+                        <td>0.8788</td>
+                        <td>75.64%</td>
+                        <td>3.8%</td>
+                        <td>0.3589</td>
+                    </tr>
+                    <tr>
+                        <td><strong>D: CORN (Ours)</strong></td>
+                        <td><strong>0.8482</strong></td>
+                        <td>69.09%</td>
+                        <td><strong>5.1%</strong></td>
+                        <td><strong>0.4584</strong></td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h3>Comparison to Existing Work</h3>
+            <p>Our single EfficientNet-B0 backbone dramatically outperformed existing complex multi-branch architectures. For example, published networks like Shakibania et al. (using 30 million parameters) achieved only 36.84% Severe NPDR recall. Our lightweight CORN architecture achieved <strong>+28.86% absolute improvement</strong> with 82% fewer parameters.</p>
+
+        </section>
+
+        <!-- Conclusions -->
+        <section id="conclusion">
+            <h2 class="section-title">Conclusions</h2>
+            <p>Our empirical findings establish four core conclusions:</p>
+            <ol>
+                <li><strong>The CORN Breakthrough:</strong> Conditional ordinal regression perfectly resolves the breakdown of unweighted CORAL on minority classes, protecting severe grades from being drowned out by the healthy majority.</li>
+                <li><strong>Distance-Aware Robustness:</strong> Both Continuous Regression and CORN tightly bound catastrophic triage errors, guaranteeing high clinical safety.</li>
+                <li><strong>High-Accuracy Potential:</strong> Simple but rigorous post-hoc adjustments and ensembling on standard backbones can yield state-of-the-art grading accuracy without introducing architectural complexity.</li>
+                <li><strong>Hardware & Deployment Efficiency:</strong> By prioritizing mathematical loss formulation over parameter bloat, clinical-grade performance is attainable on cost-effective, portable hardware.</li>
+            </ol>
+            
+            <div class="img-container">
+                <img src="assets/images/uml_activity_diagram.png" alt="UML Activity Diagram">
+                <p class="img-caption">Fig 4: UML Activity Diagram for Clinical Screening and AI Triage Workflow.</p>
+            </div>
+        </section>
+
+        <!-- Future Scope -->
+        <section id="future">
+            <h2 class="section-title">Areas to Improve / Future Scope</h2>
+            <p>Building upon these findings, future research will explore the following directions:</p>
+            <ul>
+                <li><strong>Multimodal Vision-Language Explanations:</strong> Integrate our conditional ordinal backbone with lightweight vision-language models (e.g., BiomedCLIP) to generate clinician-facing natural language rationales alongside calibrated stage predictions.</li>
+                <li><strong>Multi-Center Clinical Validation:</strong> Evaluate cross-cohort generalization across international datasets (Messidor-2, DDR, EyePACS) to test resilience against diverse demographic populations and varied camera hardware.</li>
+                <li><strong>Edge Deployment on Handheld Fundus Cameras:</strong> Quantize the EfficientNet-B0 CORN model to INT8 precision using TensorRT for embedded execution directly on portable, battery-powered fundus cameras for rural screening camps.</li>
+            </ul>
+        </section>
+
+        <!-- Download Section -->
+        <section id="download" class="download-section">
+            <h2 class="section-title" style="border:none; margin-bottom:0.5rem;">Download Research Paper</h2>
+            <p>Get the full compiled IEEE-format research paper, complete with OMML mathematical typesetting.</p>
+            <div class="btn-container">
+                <a href="assets/paper/final_paper.pdf" class="btn" download>📥 Download PDF</a>
+                <a href="assets/paper/final_paper.docx" class="btn btn-outline" download>📄 Download Word (.docx)</a>
+            </div>
+        </section>
+
+    </main>
+
+</body>
+</html>
