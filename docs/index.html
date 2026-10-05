@@ -112,8 +112,8 @@
             <table>
                 <thead>
                     <tr>
-                        <th>Model Variant</th>
-                        <th>QWK [95% CI]</th>
+                        <th>Model Variant / Configuration</th>
+                        <th>QWK</th>
                         <th>Accuracy (%)</th>
                         <th>Catastrophic Err (d ≥ 2)</th>
                         <th>PDR F1 (Grade 4)</th>
@@ -138,18 +138,27 @@
                         <td><strong>C: Continuous Reg</strong></td>
                         <td>0.8788</td>
                         <td>75.64%</td>
-                        <td>3.8%</td>
+                        <td><strong>3.8%</strong></td>
                         <td>0.3589</td>
                     </tr>
                     <tr>
-                        <td><strong>D: CORN (Ours)</strong></td>
-                        <td><strong>0.8482</strong></td>
+                        <td><strong>D: CORN (Safest Minority Recall)</strong></td>
+                        <td>0.8482</td>
                         <td>69.09%</td>
-                        <td><strong>5.1%</strong></td>
-                        <td><strong>0.4584</strong></td>
+                        <td>5.1%</td>
+                        <td>0.4584</td>
+                    </tr>
+                    <tr>
+                        <td><strong>3-Seed Ensemble (Highest Accuracy)</strong></td>
+                        <td><strong>0.8859</strong></td>
+                        <td><strong>83.82%</strong></td>
+                        <td>4.3%</td>
+                        <td><strong>0.5570</strong></td>
                     </tr>
                 </tbody>
             </table>
+
+            <p><em>(Note: While Variant D (CORN) has lower raw accuracy (69.09%), it was designed specifically for safety—maximizing Severe NPDR recall (65.7%) at the expense of borderline-healthy cases. To achieve the 83.82% peak accuracy, we used a separate 3-seed ensemble with test-time augmentation.)</em></p>
 
             <h3>Comparison to Existing Work</h3>
             <p>Our single EfficientNet-B0 backbone dramatically outperformed existing complex multi-branch architectures. For example, published networks like Shakibania et al. (using 30 million parameters) achieved only 36.84% Severe NPDR recall. Our lightweight CORN architecture achieved <strong>+28.86% absolute improvement</strong> with 82% fewer parameters.</p>
