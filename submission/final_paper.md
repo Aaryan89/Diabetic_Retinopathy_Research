@@ -1,9 +1,9 @@
 # Ordinal Neural Networks for Diabetic Retinopathy Staging: Enforcing Monotonic Rank Consistency for Safety-Critical Clinical Decision Support
 
 > **Institution:** Department of Computer Science and Engineering, MIT World Peace University, Pune  
-> **Course:** Artificial Intelligence & Expert Systems Laboratory (CSE30070)
+> **Course:** Artificial Intelligence & Expert Systems Laboratory (CSE30070)  
 > **Academic Year:** 2026–2027  
-> **Project Mentor:** Prof. Pramod Mali
+> **Project Mentor:** Prof. Pramod Mali  
 
 ### Project Team Members
 
@@ -18,127 +18,108 @@
 
 ## 1. ABSTRACT
 
-Diabetic Retinopathy (DR) is one of the leading causes of preventable blindness worldwide, affecting millions of individuals suffering from diabetes mellitus. Early and accurate detection through regular retinal screening can prevent irreversible vision loss. However, manual grading of retinal fundus photographs by specialized ophthalmologists is labor-intensive and unsustainable given the sheer volume of diabetic patients. While deep learning has achieved impressive results in binary detection (healthy vs. diseased), automated grading across the 5-point International Clinical Diabetic Retinopathy (ICDR) scale (Grade 0: No DR, Grade 1: Mild NPDR, Grade 2: Moderate NPDR, Grade 3: Severe NPDR, Grade 4: Proliferative DR) remains fraught with clinical hazards.
+Automated grading of Diabetic Retinopathy (DR) across the 5-point International Clinical Diabetic Retinopathy (ICDR) scale (Grade 0: No DR, Grade 1: Mild Non-Proliferative DR [NPDR], Grade 2: Moderate NPDR, Grade 3: Severe NPDR, Grade 4: Proliferative DR [PDR]) is essential for scalable screening but vulnerable to triage failure when trained with standard nominal cross-entropy. Categorical cross-entropy treats all diagnostic errors symmetrically: confusing vision-threatening PDR (Grade 4) with healthy tissue (Grade 0) incurs the same loss penalty as confusing it with Severe NPDR (Grade 3), despite the drastically different clinical consequences.
 
-Most modern automated screening systems treat this problem as nominal multiclass classification, training convolutional networks with standard categorical cross-entropy over a softmax output layer. In this work, we demonstrate that this conventional approach suffers from a dangerous mathematical blind spot: categorical cross-entropy treats every incorrect prediction identically. To a softmax loss function, misclassifying a patient with vision-threatening Proliferative DR (Grade 4) as healthy (Grade 0) incurs the exact same numerical penalty as misclassifying them as Severe NPDR (Grade 3). In a hospital or rural screening camp, however, this difference is catastrophic: confusing Grade 4 with Grade 3 still triggers an urgent specialist referral, whereas confusing Grade 4 with Grade 0 discharges a patient facing imminent retinal detachment back home for an annual checkup.
+In this work, we evaluate rank-consistent ordinal formulations and regularized ensembling on the APTOS 2019 benchmark (3,662 fundus photographs) using a uniform, lightweight EfficientNet-B0 backbone (5.3M parameters). We compare five paradigms under locked stratified data splits: (A) Nominal Softmax Baseline, (B) Consistent Rank Logits (CORAL), (C) Continuous Regression with Smooth L1 loss, (D) Conditional Ordinal Regression for Neural Networks (CORN) with effective-number class weighting and differentiable Soft-QWK loss, and (E) a 3-Seed Regularized Ensemble with label smoothing ($\alpha = 0.08$) and test-time augmentation (TTA).
 
-To resolve this limitation, we investigate distance-aware and rank-consistent ordinal formulations on the APTOS 2019 Blindness Detection benchmark (3,662 retinal images) using a uniform, lightweight EfficientNet-B0 backbone (5.3M parameters) running with native GPU acceleration on an NVIDIA GeForce RTX 5050 Laptop GPU. We evaluate four distinct paradigms under strictly controlled, identical conditions: (A) standard Softmax baseline, (B) Consistent Rank Logits (CORAL), (C) Continuous Regression with Smooth L1 loss, and (D) Conditional Ordinal Regression for Neural Networks, termed Variant D (CORN), coupled with effective-number class weighting and a differentiable Soft-QWK loss. Furthermore, we develop an accuracy-optimized 3-seed ensemble with label smoothing and test-time augmentation (TTA), exploring post-hoc logit adjustment.
-
-Our experimental results on an independent 550-image holdout test set reveal two major clinical breakthroughs:
-1. **Resolution of Minority-Stage Collapse:** While unweighted CORAL breaks down on the small Severe NPDR class (0.0% recall, 26.4% catastrophic errors), our Variant D (CORN) framework elevates Severe NPDR sensitivity to **65.7%** (95% CI: [48.3%, 82.9%]) and slashes catastrophic multi-grade triage errors ($|y - \hat{y}| \ge 2$) by 80.7% down to just **5.1%**, delivering a Quadratic Weighted Kappa (QWK) of **0.8482**. Most importantly, our single EfficientNet-B0 dramatically outperforms existing complex multi-branch architectures from literature—such as Shakibania et al. [2], whose 30-million-parameter network achieved only **36.84%** severe sensitivity. We achieve an absolute +28.86% improvement with 82% fewer parameters.
-2. **High-Accuracy Confirmatory Pipeline:** For high-throughput secondary screening, our 3-seed regularized ensemble achieves a state-of-the-art raw classification accuracy of **83.82%** (95% CI: [80.73%, 86.73%]), a QWK of **0.8859**, and a project-best Mean Absolute Error (MAE) of **0.2200**, with post-hoc logit adjustment reaching a peak study QWK of **0.8929** at $\tau = 0.5$.
-
-By combining mathematical rigor with practical clinical safety rules, this project provides a robust foundation for deploying artificial intelligence in safety-critical clinical triage and expert systems.
+Our featured model, **Variant E: 3-Seed Ensemble + TTA**, achieves the highest classification accuracy (**83.82%**, 95% CI: [80.73%, 86.73%], vs. 83.45% for the best single seed), with Quadratic Weighted Kappa (QWK: **0.8859**, 95% CI: [0.8503, 0.9170]) and Mean Absolute Error (MAE: **0.2200**, 95% CI: [0.1727, 0.2691]) comparable to the best single seed (Seed 44: QWK 0.8901, MAE 0.2200). Its primary benefit is stability across seeds (single-seed mean 82.73% $\rightarrow$ 83.82%), reducing variance across stochastic training trajectories rather than yielding a large gain over the best seed. The ensemble maintains a catastrophic triage error rate ($|y - \hat{y}| \ge 2$) of **4.36%**. Concurrently, other formulations demonstrate specialized strengths: Variant D (CORN) delivers the highest Severe NPDR sensitivity (**65.7%**, 95% CI: [48.3%, 82.9%]), resolving the minority-class collapse observed in unweighted CORAL (0.0% recall) and improving upon the 36.84% reported by Shakibania et al. [2] (different dataset and task setting; not a head-to-head comparison), while Variant C (Continuous Regression) achieves the lowest overall catastrophic error rate (**3.8%**). Post-hoc logit adjustment on the ensemble offers an adjustable accuracy–sensitivity operating curve without retraining. These results demonstrate that combining lightweight architectures with ordinal-aware formulations provides practical, deployable decision support for clinical screening.
 
 ---
 
 ## 2. LITERATURE SURVEY
 
-Automated Diabetic Retinopathy screening has been extensively studied over the past decade. Researchers have explored transfer learning, custom multi-branch networks, image augmentation schemes, data imbalance techniques, explainable AI, and lesion segmentation. In this section, we analyze seven representative research papers from recent literature, examine their methodologies, identify their core vulnerabilities, and clearly highlight the decisive factors where our work outperforms them.
+Deep learning for DR screening has evolved from binary classification to multi-stage grading and multimodal explanations. However, most published models optimize nominal cross-entropy, creating metric blindness across disease stages. In this section, we review seven representative studies, identifying their methodologies and clinical limitations.
 
-### 2.1 Detailed Analysis of Existing Literature
+### 2.1 Analysis of Existing Literature
 
 #### 1. Khalifa et al. (2019) — Deep Transfer Learning Models for Medical DR Detection [1]
-Khalifa et al. evaluated deep transfer learning backbones (AlexNet, VGG16, ResNet50, and InceptionV3) on retinal fundus images from the Kaggle Diabetic Retinopathy dataset. Their ResNet50 model achieved 97.9% accuracy in binary screening (No DR vs. DR). 
-- *Vulnerability & Gap:* The authors simplified the entire clinical problem into a binary classification task. While binary screening identifies whether disease is present, it cannot grade disease severity. In clinical practice, an automated tool that cannot distinguish Mild NPDR from Proliferative DR cannot determine whether a patient requires routine annual monitoring or emergency retinal photocoagulation.
+Khalifa et al. evaluated six pre-trained CNNs (AlexNet, ResNet-18, SqueezeNet, GoogleNet, VGG-16, VGG-19) on the APTOS 2019 dataset (3,662 fundus images) across the full 5-stage ICDR scale. Although AlexNet reported 97.9% accuracy, a 4-fold offline geometric/color augmentation was executed across the aggregate dataset *prior* to splitting (expanding to 14,648 images), introducing cross-split data leakage. Furthermore, Grade 3 (Severe NPDR) suffered the lowest classification accuracy across all architectures (falling to 67.8% in SqueezeNet).
 
-#### 2. Shakibania et al. (2023) — Dual Branch Deep Learning Network for Detection and Stage Grading of DR [2]
-Shakibania et al. designed a two-branch convolutional neural network combining ResNet50 and EfficientNet-B0 (totaling ~30 million parameters) to perform binary detection and multi-class stage grading simultaneously on the Messidor-2 and DDR datasets using Complement Cross Entropy (CCE) loss. While their network achieved 84.09% on binary detection, its accuracy plummeted to 56.40% on 5-class grading. 
-- *Critical Failure Mode:* More alarmingly, their paper reports that Grade 3 (Severe NPDR) sensitivity collapsed to just **36.84%**, failing to identify nearly two out of every three patients with vision-threatening severe disease. The authors noted severe feature overlap between adjacent classes. Because their network relied on nominal cross-entropy without distance penalties, it suffered severe diagnostic scatter across non-adjacent grades.
-- *Our Decisive Superiority:* Our Variant D (CORN) framework running on a single EfficientNet-B0 (5.3M parameters) achieves a Severe NPDR sensitivity of **65.7%** (95% CI: [48.3%, 82.9%]). This represents an absolute gain of **+28.86%** in detecting severe vision-threatening disease, accomplished with an **82% reduction in model parameters** and zero multi-branch training overhead.
+#### 2. Shakibania et al. (2023) — Dual Branch Network for Detection and Stage Grading of DR [2]
+Shakibania et al. designed a two-branch ResNet-50 and EfficientNet-B0 network (~30M parameters) evaluated on standalone APTOS 2019 (88.1% multi-class accuracy, 91.8% QWK) and on a selectively merged multi-center dataset (APTOS 2019, Messidor-2, IDRiD; 89.60% multi-class accuracy, 93.00% QWK). Under unweighted Complement Cross Entropy (CCE), Grade 3 (Severe NPDR) sensitivity collapsed to **36.84%** due to feature overlap and class imbalance. In our experiments, Variant D (CORN) achieves **65.7%** Severe NPDR sensitivity with a single 5.3M-parameter model, representing an absolute improvement of +28.86% with 82% fewer parameters (different dataset and task setting; not a head-to-head comparison).
 
 #### 3. Tymchenko, Marchenko, and Spodarets (2020) — Deep Learning Approach to DR Detection [3]
-Tymchenko et al. developed a custom deep convolutional architecture trained on 35,126 retinal images from the EyePACS challenge, incorporating cyclic pooling alongside CutMix and MixUp data augmentations. Their network achieved a Quadratic Weighted Kappa (QWK) of 0.841. 
-- *Vulnerability & Gap:* The authors correctly highlighted that Quadratic Weighted Kappa must serve as the primary evaluation metric because it quadratically penalizes distance errors. However, their loss function remained standard cross-entropy. They attempted to solve distance alignment through input image blending (MixUp) rather than enforcing ordinal structure in the mathematical loss function itself.
+Tymchenko et al. proposed a multi-target learning paradigm that jointly trained nominal classification (Cross-Entropy + Focal loss), ordinal regression ($K-1$ rank thresholds with binary focal loss), and continuous regression (MAE/MSE) heads on heavy ensembles of EfficientNet-B4/B5 and SE-ResNeXt-50. Pre-trained on EyePACS (35,126 images) and fine-tuned on APTOS 2019, IDRiD, and Messidor, their ensemble ranked 54th out of 2,943 teams on Kaggle with an official test QWK of 0.925. However, joint multi-task training on heavy multi-model ensembles did not isolate the independent contribution of ordinal rank loss versus continuous regression on a single compact architecture.
 
 #### 4. Mardianta, Arifianto, and Fatichah (2025) — CNN with SMOTE and CLAHE Applied to Fundus Images [4]
-Mardianta et al. addressed class imbalance on the Messidor-1 dataset by combining Contrast Limited Adaptive Histogram Equalization (CLAHE) with Synthetic Minority Over-sampling Technique (SMOTE), reporting an accuracy of 93.3%.
-- *Vulnerability & Gap:* The authors applied SMOTE in flattened feature and pixel spaces. Synthesizing medical fundus imagery by linear interpolation creates unnatural, blurry pixel blends that do not correspond to valid anatomical retinal pathology (such as authentic cotton-wool spots or microaneurysms). Furthermore, their study was restricted to binary classification.
-- *Our Decisive Superiority:* We completely avoid synthetic image hallucination. Instead of SMOTE, we use Cui et al.'s effective-number class weighting ($\beta = 0.9999$) and weighted mini-batch sampling on real images. On the full 5-class clinical scale, our ensemble achieves **83.82% accuracy** and **0.8859 QWK** without creating a single artificial pixel artifact.
+Mardianta et al. addressed class imbalance on APTOS 2019 using CLAHE and Synthetic Minority Over-sampling Technique (SMOTE) with a pre-trained Xception CNN, reporting 99.55% binary accuracy and 95.26% 5-class accuracy. However, synthesizing retinal feature vectors via linear SMOTE interpolation risks generating non-anatomical artifacts and data leakage, while treating 5-class grading as nominal cross-entropy without evaluating clinical QWK.
 
-#### 5. Karthik, Pandiyaraju, and Mynampati (2025) — Explainable AI for DR Detection Using Attention and Fuzzy Logic [5]
-Karthik et al. introduced an interpretability pipeline combining ResNet50 with spatial and channel attention mechanisms and a Fuzzy Inference System, reporting 95.8% accuracy on EyePACS.
-- *Vulnerability & Gap:* To achieve high headline accuracy, the authors collapsed the five standardized ICDR clinical stages into three coarse categories (Normal, Non-Proliferative, and Proliferative). Despite this simplification, their reported Severe sensitivity was only 58%. Furthermore, the underlying feature backbone was trained with nominal cross-entropy, offering no distance guarantees.
-- *Our Decisive Superiority:* We preserve the full 5-tier clinical ICDR standard mandated by ophthalmologists and achieve **65.7% Severe NPDR sensitivity**, outperforming their coarse 3-class model while preserving the exact clinical boundaries needed for patient scheduling.
+#### 5. Karthik, Pandiyaraju, and Mynampati (2025) — Explainable AI for DR Detection [5]
+Karthik et al. combined EfficientNetV2-B3 with channel attention and fuzzy membership classification on APTOS 2019 (366 test images), reporting 91.5% accuracy by collapsing the five ICDR stages into three coarse categories (Normal, Mild/Moderate, Severe/Proliferative). Even under this simplified 3-class scheme, their severe/proliferative sensitivity reached only 58% (missing 42% of sight-threatening cases). We preserve the full 5-tier clinical standard while attaining **65.7%** Severe NPDR sensitivity.
 
-#### 6. Khokhar et al. (2026) — From Pixels to Explanations: Interpretable DR Grading with CNN-Transformer Ensembles and VLMs [6]
-Khokhar et al. constructed a large multimodal ensemble combining Swin-Transformers, ResNet, and Vision-Language Models (BiomedCLIP and CheXzero) on APTOS 2019, achieving a QWK of 0.912.
-- *Vulnerability & Gap:* While multimodal captions provide helpful qualitative descriptions, this framework demands massive GPU compute clusters, exhibits high inference latency (>350ms per image), and suffers from an elevated false-alarm rate on Grade 1 microaneurysms. Their classification head still deployed nominal cross-entropy. In resource-constrained clinics or mobile screening vans, such heavy foundation models cannot be deployed.
+#### 6. Khokhar et al. (2026) — Interpretable DR Grading with CNN-Transformer Ensembles and VLMs [6]
+Khokhar et al. benchmarked six CNN and Transformer backbones (ResNet-50 reaching 0.919 QWK, Swin reaching 0.916 QWK) under 5-fold cross-validation with weighted soft voting and paired medical Vision-Language Models (LLaVA-Med-v1.5, 7B parameters) for rationale generation on APTOS 2019. Although multimodal explanations are valuable, the large parameter footprint limits point-of-care mobile deployment. Our framework achieves competitive diagnostic accuracy (**0.8859** QWK, **83.82%** accuracy) using a compact 5.3M-parameter backbone.
 
-#### 7. Manoj and Bhosale (2024) — Detection and Classification of DR Using Segmentation to Facilitate Referral Recommendation [7]
-Manoj and Bhosale used UNet and SegNet to segment retinal microaneurysms, hemorrhages, and hard exudates from DDR and IDRiD datasets, feeding segmented feature masks into a VGG16 classifier (92.1% accuracy) and passing predicted text labels into ChatGPT to generate patient referral letters.
-- *Vulnerability & Gap:* Their two-stage architecture requires dense, pixel-level ground truth segmentation masks, which are prohibitively expensive to annotate and unavailable in standard screening cohorts. More critically, feeding unverified classification outputs into a large language model is clinically unsafe: if the vision classifier makes a multi-grade error (e.g., predicting Grade 0 for a Grade 4 patient), the language model will generate an authoritative, polite, but completely incorrect letter telling a blinding patient they do not need care.
-- *Our Decisive Superiority:* Rather than relying on unverified LLM text generation, our framework mathematically bounds catastrophic multi-grade triage errors ($|y - \hat{y}| \ge 2$) to just **3.8%–5.1%**, providing the strict mathematical safety envelope required by deterministic clinical expert systems.
+#### 7. Manoj and Bhosale (2024) — Lesion Segmentation to Facilitate Referral Recommendation [7]
+Manoj and Bhosale combined U-Net segmentation of six retinal lesion structures on IDRiD with upstream DR classification and ChatGPT-generated referral recommendations. However, segmentation requires dense pixel annotations, and unverified language model referrals risk patient safety when upstream nominal classification makes multi-grade errors. Our approach directly bounds catastrophic errors ($d \ge 2$) to **3.8%–4.36%** without language model dependency.
 
 ### 2.2 Literature Summary and Comparative Mapping
 
-Table 1 summarizes the literature survey, comparing published methodologies against our proposed framework across key architectural and clinical criteria.
+Table 1 summarizes the comparison between existing studies and our work across architectural and clinical criteria.
 
 #### TABLE 1: Literature Survey Summary and Comparative Architecture Mapping
 
-| Paper | Architecture / Method | Dataset | Output Task | Key Metric | Major Limitation / Vulnerability | Our Decisive Advantage |
+| Paper | Architecture / Method | Dataset | Output Task | Key Metric | Major Limitation | Relation to Our Work |
 | :--- | :--- | :--- | :---: | :---: | :--- | :--- |
-| **Khalifa et al. [1]** | VGG16, ResNet50, InceptionV3 Transfer Learning | Kaggle DR (1,000 imgs) | Binary (2 classes) | Acc: 97.9% | Ignores 5-stage grading; cannot inform clinical referral workflows | Solves full 5-stage ICDR grading with 0.8859 QWK and 83.82% accuracy |
-| **Shakibania et al. [2]** | Dual Branch (ResNet50 + EfficientNet-B0), CCE Loss | Messidor-2, DDR | 5-stage Grading | Acc: 56.4%, Severe Recall: 36.84% | Severe NPDR sensitivity collapsed to 36.84%; heavy ~30M parameter model | **+28.86% higher Severe Recall (65.7%)** using a single 5.3M parameter B0 model (82% smaller) |
-| **Tymchenko et al. [3]** | Custom CNN + Cyclic Pooling + CutMix/MixUp | EyePACS (35,126 imgs) | 5-stage Grading | QWK: 0.841 | Relies on image blending rather than loss-level rank consistency | Enforces mathematical rank consistency directly via CORN and Soft-QWK loss |
-| **Mardianta et al. [4]** | CNN + SMOTE + CLAHE | Messidor-1 | Binary (2 classes) | Acc: 93.3% | SMOTE creates blurry, non-anatomical synthetic artifacts | Natural effective-number weighting ($\beta = 0.9999$); no synthetic artifacts; full 5 classes |
-| **Karthik et al. [5]** | ResNet50 + Attention + Fuzzy Inference System | EyePACS | Coarse 3 classes | Acc: 95.8%, Severe Recall: 58% | Simplified 5 classes into 3; still only achieved 58% severe sensitivity | Retains all 5 standardized clinical grades and reaches 65.7% severe sensitivity |
-| **Khokhar et al. [6]** | Swin-Transformer + ResNet + VLMs (BiomedCLIP) | APTOS 2019 | 5-stage Grading | QWK: 0.912 | Prohibitive compute latency (>350ms); nominal loss blindness; false positives | Lightweight EfficientNet-B0 (<12ms latency); mobile GPU deployable; distance-aware loss |
-| **Manoj & Bhosale [7]** | UNet/SegNet Lesion Segmentation + VGG16 + ChatGPT | DDR, IDRiD | 5-stage + Referral | Acc: 92.1% | Requires expensive pixel masks; unverified LLM referrals risk patient safety | Mathematically bounds catastrophic multi-grade triage errors ($d \ge 2$) to just 3.8%–5.1% |
-| **Our Work** | **EfficientNet-B0 + Variant D (CORN) / 3-Seed Ensemble** | **APTOS 2019 (3,662 imgs)** | **5-stage Grading** | **Acc: 83.82%, QWK: 0.8859 / 0.8929, Severe Recall: 65.7%** | Single-dataset benchmark evaluation (requires multi-center clinical validation) | **Combines high accuracy, peak QWK, and 65.7% severe recall with strict hardware safety** |
+| **Khalifa et al. [1]** | AlexNet, ResNet-18, VGG16/19, CCE Loss | APTOS 2019 (3,662 imgs) | 5-stage Grading | Acc: 97.9% | Pre-split 4x augmentation leakage; Severe recall dropped to 67.8% | Evaluates locked split without leakage (0.8859 QWK, 83.82% Acc) |
+| **Shakibania et al. [2]** | Dual Branch (ResNet50 + B0), CCE Loss | APTOS 2019, Messidor-2, IDRiD | 5-stage Grading | Acc: 89.60%, QWK: 0.930, Severe Rec: 36.84% | Severe sensitivity collapsed to 36.84%; ~30M params | Variant D reaches **65.7%** Severe Recall using 5.3M params (different dataset and task setting; not a head-to-head comparison) |
+| **Tymchenko et al. [3]** | Multi-target (Nominal + Ordinal + Reg.), Heavy Ens. | EyePACS (35k), APTOS 2019 | 5-stage Grading | Test QWK: 0.925 | Heavy ensemble (B4/B5/ResNeXt); heads not ablated independently | Isolates pure ordinal and single-backbone design on identical 5.3M model |
+| **Mardianta et al. [4]** | Xception + SMOTE + CLAHE | APTOS 2019 | 5-stage Grading | Acc: 95.26% | SMOTE creates synthetic artifacts; nominal loss; no QWK reported | Real-image effective-number weighting; evaluates QWK and ordinal distance |
+| **Karthik et al. [5]** | EfficientNetV2-B3 + SE Attention + Fuzzy | APTOS 2019 (366 test) | Coarse 3 classes | Acc: 91.5%, Severe Rec: 58% | Collapsed 5 classes to 3; severe sensitivity only 58% | Preserves all 5 clinical stages with 65.7% severe sensitivity |
+| **Khokhar et al. [6]** | Swin, ResNet-50 + 7B VLMs | APTOS 2019 (5-fold CV) | 5-stage Grading | QWK: 0.916–0.919 | Heavy compute footprint; high latency | Lightweight 5.3M-parameter model deployable on laptop hardware |
+| **Manoj & Bhosale [7]** | UNet (6 lesions) + Classifier + ChatGPT | IDRiD, APTOS 2019 | 5-stage + Referral | Dice: 0.787–0.806 | Requires dense masks; unverified LLM text generation | Bounds catastrophic errors ($d \ge 2$) to 3.8%–4.36% |
+| **This Work** | **EfficientNet-B0 + Variant E (Ensemble) / Variant D (CORN)** | **APTOS 2019 (3,662 imgs)** | **5-stage Grading** | **Acc: 83.82%, QWK: 0.8859, Severe Rec: 65.7%** | Single-dataset benchmark evaluation | **Combines 83.82% accuracy, 0.8859 QWK, and 65.7% severe recall** |
 
 ---
 
 ## 3. PROBLEM STATEMENT
 
-Standard deep learning models for Diabetic Retinopathy treat clinical stage grading as nominal multiclass classification, creating metric blindness where life-threatening misclassifications incur identical loss penalties to minor adjacent errors. This project formulates distance-aware ordinal neural networks on retinal fundus imagery to guarantee rank consistency, eliminate catastrophic multi-grade triage failures, and dramatically elevate minority-class severe disease sensitivity under strict hardware constraints.
+Standard deep learning models for Diabetic Retinopathy treat stage grading as nominal multiclass classification, creating metric blindness where life-threatening misclassifications incur identical loss penalties to minor adjacent errors. This project investigates distance-aware ordinal neural networks and regularized ensembling on retinal fundus imagery to improve rank consistency, suppress catastrophic multi-grade triage errors ($|y - \hat{y}| \ge 2$), and elevate minority-class severe disease sensitivity under practical resource constraints.
 
 ---
 
 ## 4. OBJECTIVES
 
-1. Formulate and benchmark rank-consistent ordinal loss architectures (CORAL and CORN with conditional cumulative probabilities) against standard nominal softmax and continuous regression on the 5-point ICDR Diabetic Retinopathy scale.
-2. Implement an effective-number class weighting scheme, differentiable Soft-QWK loss regularization, and post-hoc logit adjustment to resolve extreme class imbalance without generating non-physiological synthetic data artifacts.
-3. Bound catastrophic multi-grade triage misclassifications ($|y - \hat{y}| \ge 2$) to below 5% and maximize Quadratic Weighted Kappa ($\ge 0.88$) and Severe NPDR sensitivity ($\ge 65\%$) on a lightweight, deployable EfficientNet-B0 backbone.
+1. Formulate and benchmark rank-consistent ordinal loss architectures (CORAL and CORN) against standard nominal softmax and continuous regression on the 5-point ICDR Diabetic Retinopathy scale.
+2. Implement effective-number class weighting and differentiable Soft-QWK loss regularization to address class imbalance without generating synthetic image artifacts.
+3. Feature a regularized 3-seed ensemble with test-time augmentation to maximize classification accuracy ($\ge 80\%$) and QWK ($\ge 0.88$) while keeping catastrophic multi-grade misclassifications below 5% on a lightweight EfficientNet-B0 backbone.
 
 ---
 
 ## 5. SYSTEM ARCHITECTURE DIAGRAM
 
-The end-to-end system architecture is designed as a modular, safety-critical diagnostic pipeline that takes a raw retinal photograph, performs clinical contrast enhancement, extracts high-level representations through a regularized backbone, evaluates predictions across ordinal decision heads, and maps outputs into deterministic clinical referral rules.
+The diagnostic pipeline processes a raw retinal photograph through contrast enhancement, extracts representations via a regularized backbone, evaluates predictions across ordinal and ensembled heads, and maps outputs into clinical triage rules.
 
 ![End-to-End System Architecture Diagram: Preprocessing, EfficientNet-B0 Backbone, Ordinal Inference Pathways, and Clinical Decision Support Triage Rules.](submission/results/system_architecture.png)
 
-### 5.1 Detailed Architectural Walkthrough
+### 5.1 Architectural Components
 
-As illustrated in Fig. 1, the system comprises six synchronized components:
+As illustrated in Fig. 1, the system comprises six components:
 
-1. **Input and Acquisition Stage:** High-resolution digital fundus photographs are captured from tele-ophthalmology screening clinics. These raw images frequently exhibit uneven peripheral illumination, black borders from camera sensors, and low contrast between microvascular lesions and choroidal tissue.
+1. **Image Acquisition:** Digital fundus photographs exhibiting natural variations in illumination and pigmentation are acquired from screening clinics.
 2. **Preprocessing Module:** 
-   - *Circular Crop Boundary Detection:* Automatically segments the functional retinal globe, eliminates inactive sensor pixels, and crops to the minimum enclosing bounding box.
-   - *Contrast Limited Adaptive Histogram Equalization (CLAHE):* Applied across an $8 \times 8$ grid with a clip limit of 2.0 to enhance subtle microaneurysms and hard exudates without over-amplifying background camera noise.
-   - *Resampling and Normalization:* Images are rescaled to a uniform $224 \times 224$ pixels and standardized using ImageNet RGB mean and standard deviation vectors.
-3. **Feature Extraction Backbone (EfficientNet-B0):** The preprocessed image is processed through EfficientNet-B0 (5.3M parameters). To prevent catastrophic overfitting on the small 2,563-image training set, the stem and first three MBConv stages (`features[:4]`) are frozen, preserving generic edge and texture filters while allowing higher-level stages to specialize on microvascular pathology. Global Average Pooling collapses the spatial feature map into a dense 1280-dimensional embedding vector $\phi(\mathbf{x})$.
-4. **Multi-Paradigm Inference Engine:**
-   - *Primary Screening Route (Variant D Head):* Evaluates 4 conditional binary classifiers to predict the step-by-step conditional probability of disease progression, dynamically weighted by Cui et al.'s effective number of samples and regularized by Soft-QWK loss.
-   - *Secondary Confirmatory Route (3-Seed Ensemble Head):* Averages the predictions of three independent models trained with label smoothing ($\alpha = 0.08$) across 4-way flip Test-Time Augmentation (TTA), with optional post-hoc logit adjustment ($\tau$).
-5. **Hardware Safety and Runtime Monitor:** Built-in safeguards monitor GPU memory via `torch.cuda.memory_reserved()` and manage mixed-precision (FP16) autocasting via `torch.cuda.amp.GradScaler`. If memory usage exceeds 90% of the 8GB budget, the batch size is automatically halved. In practice, our pipeline executes within 540 MiB of VRAM and runs at <12ms per image.
-6. **Expert System Clinical Decision Support Engine:** Rather than outputting raw, unconstrained probabilities, the system routes discrete predictions through deterministic clinical referral rules:
-   - **Rule 1 (Grade 4):** Emergency Vitreoretinal Referral (< 48 Hours)
-   - **Rule 2 (Grade 3):** Urgent Laser / Anti-VEGF Evaluation (< 2 Weeks)
-   - **Rule 3 (Grade 2):** Semi-Urgent Comprehensive Examination & OCT Scan (< 6 Months)
-   - **Rule 4 (Grade 1):** Primary Care Surveillance & Lifestyle Review (< 12 Months)
-   - **Rule 5 (Grade 0):** Routine Annual Tele-Screening Clearance
+   - *Circular Crop Boundary Detection:* Automatically segments the functional retinal globe, removing inactive black camera borders.
+   - *Contrast Limited Adaptive Histogram Equalization (CLAHE):* Applied in CIE LAB color space on the luminance channel ($8 \times 8$ grid, clip limit 2.0) to enhance microaneurysms and hemorrhages.
+   - *Resampling:* Images are resized to $224 \times 224$ pixels and standardized using ImageNet statistics.
+3. **Feature Extraction Backbone (EfficientNet-B0):** The preprocessed image is processed through EfficientNet-B0 (5.3M parameters), yielding a 1280-dimensional feature vector $\phi(\mathbf{x})$ via Global Average Pooling. While Variants A, B, C, and E are fine-tuned end-to-end with all layers unfrozen, Variant D (CORN) freezes the stem and first three MBConv stages (`features[:4]`) to retain generic low-level edge filters and prevent feature drift under minority-class reweighting.
+4. **Inference Pathways:**
+   - *Ordinal Pathway (Variant D: CORN):* Evaluates 4 conditional binary classifiers regularized by Soft-QWK loss and effective-number weighting to maximize severe disease sensitivity.
+   - *Featured Ensemble Pathway (Variant E: 3-Seed Ensemble + TTA):* Averages the softmax outputs of three independently trained models with label smoothing ($\alpha = 0.08$) over 4-way flip TTA, with optional post-hoc logit adjustment.
+5. **Implementation & Compute:** All models were trained on a single consumer laptop GPU using under 1 GB of VRAM with mixed-precision arithmetic.
+6. **Clinical Decision Support Triage Rules:** Discrete stage predictions map to standardized clinical pathways:
+   - **Grade 4 (PDR):** Emergency Vitreoretinal Referral (< 48 Hours)
+   - **Grade 3 (Severe NPDR):** Urgent Laser / Anti-VEGF Evaluation (< 2 Weeks)
+   - **Grade 2 (Moderate NPDR):** Comprehensive Examination & OCT Scan (< 6 Months)
+   - **Grade 1 (Mild NPDR):** Surveillance Follow-up (< 12 Months)
+   - **Grade 0 (No DR):** Routine Annual Tele-Screening Recall
 
 ---
 
 ## 6. IMPLEMENTATION
 
-In this section, we present the implementation details, dataset characteristics, preprocessing steps, and complete mathematical formulations for each model variant.
+### 6.1 Dataset Characteristics and Partitioning
 
-### 6.1 Dataset Characteristics and Class Imbalance
-
-We evaluate our pipeline on the Asia Pacific Tele-Ophthalmology Society (APTOS) 2019 Blindness Detection dataset, consisting of 3,662 fundus photographs graded by medical experts according to the 5-point ICDR scale. The dataset exhibits severe natural epidemiological imbalance:
+We evaluate our pipeline on the APTOS 2019 Blindness Detection dataset (3,662 fundus photographs) under the 5-point ICDR scale. The dataset exhibits substantial natural class imbalance (Fig. 2):
 - **Grade 0 (No DR):** 1,805 images (49.29%)
 - **Grade 1 (Mild NPDR):** 370 images (10.10%)
 - **Grade 2 (Moderate NPDR):** 999 images (27.28%)
@@ -147,203 +128,197 @@ We evaluate our pipeline on the Asia Pacific Tele-Ophthalmology Society (APTOS) 
 
 ![Dataset Class Distribution across the 3,662 Retinal Fundus Images in APTOS 2019 under the 5-point ICDR Clinical Severity Scale.](submission/results/class_distribution.png)
 
-To guarantee rigorous evaluation without data leakage, the 3,662 images were divided using stratified random sampling into three locked partitions:
+The images were partitioned using stratified random sampling with a fixed seed (42) into three locked sets:
 - **Training Set (70%):** 2,563 images (Grade 0: 1,263; Grade 1: 259; Grade 2: 700; Grade 3: 135; Grade 4: 206)
 - **Validation Set (15%):** 549 images (Grade 0: 271; Grade 1: 55; Grade 2: 150; Grade 3: 29; Grade 4: 44)
 - **Holdout Test Set (15%):** 550 images (Grade 0: 271; Grade 1: 56; Grade 2: 149; Grade 3: 29; Grade 4: 45)
 
-All 3,662 images were preprocessed and cached to local solid-state storage in `./data/aptos2019/preprocessed_224/` to ensure zero-latency training I/O. Fig. 3 displays representative preprocessed images across all five clinical grades.
+All images were preprocessed and cached in `./data/aptos2019/preprocessed_224/` for reproducible training I/O. Fig. 3 shows sample preprocessed images across each grade.
 
 ![Representative Preprocessed Retinal Fundus Photographs across the Five Clinical ICDR Grades following Circular Cropping and CIE LAB CLAHE Contrast Equalization.](submission/results/sample_images_per_class.png)
 
 ### 6.2 Mathematical Formulation of Evaluated Paradigms
 
-#### 1) Variant A: Nominal Softmax Baseline and the Proof of Metric Blindness
-In nominal classification, the 5 stages are treated as independent, unrelated categories. The embedding $\phi(\mathbf{x}) \in \mathbb{R}^{1280}$ is projected through a linear layer $\mathbf{W} \in \mathbb{R}^{5 \times 1280}$ to produce logits $\mathbf{z} = [z_0, z_1, z_2, z_3, z_4]^T$. Probabilities are computed via the softmax function:
+#### 1) Variant A: Nominal Softmax Baseline and Metric Blindness
+In nominal classification, the embedding $\phi(\mathbf{x}) \in \mathbb{R}^{1280}$ is projected via $\mathbf{W} \in \mathbb{R}^{5 \times 1280}$ to produce logits $\mathbf{z} = [z_0, z_1, z_2, z_3, z_4]^T$. Probabilities are computed via the softmax function:
 
 $$\hat{p}_k = \frac{\exp(z_k)}{\sum_{j=0}^4 \exp(z_j)}, \quad k \in \{0, 1, 2, 3, 4\}$$
 
-The model is trained by minimizing categorical cross-entropy:
+The loss is categorical cross-entropy:
 
 $$\mathcal{L}_{CE} = -\sum_{k=0}^4 y_k \log \hat{p}_k$$
 
-where $\mathbf{y}$ is the one-hot encoded ground truth.
+**Metric Blindness Property:** Consider true class $y = 4$ ($\mathbf{y} = [0, 0, 0, 0, 1]^T$). For any model outputting probability $\hat{p}_4 = 0.05$ on the true class, the loss is:
 
-**Mathematical Proof of Metric Blindness:**  
-Consider a patient with true Proliferative DR ($y = 4$, so $\mathbf{y} = [0, 0, 0, 0, 1]^T$). The loss is simply $\mathcal{L}_{CE} = -\log \hat{p}_4$.
-Now compare two hypothetical models:
-- **Model 1 (Catastrophic Error):** Predicts $\mathbf{p}^{(1)} = [0.80, 0.05, 0.05, 0.05, 0.05]^T$, placing 80% confidence on Grade 0 (No DR). This is an off-by-four misclassification ($|4 - 0| = 4$).
-- **Model 2 (Minor Borderline Error):** Predicts $\mathbf{p}^{(2)} = [0.05, 0.05, 0.05, 0.80, 0.05]^T$, placing 80% confidence on Grade 3 (Severe NPDR). This is an off-by-one misclassification ($|4 - 3| = 1$).
+$$\mathcal{L}_{CE} = -\log(0.05) \approx 2.9957$$
 
-For both models, the predicted probability on the true class is $\hat{p}_4 = 0.05$. Therefore:
+Whether the remaining 0.95 probability is assigned to Grade 3 ($|4 - 3| = 1$, safe error) or Grade 0 ($|4 - 0| = 4$, dangerous discharge), the cross-entropy loss and gradient $\frac{\partial \mathcal{L}_{CE}}{\partial z_k} = \hat{p}_k - y_k$ treat non-target errors symmetrically.
 
-$$\mathcal{L}_{CE}^{(1)} = -\log(0.05) = 2.9957 = \mathcal{L}_{CE}^{(2)}$$
-
-The loss gradient $\frac{\partial \mathcal{L}_{CE}}{\partial z_k} = \hat{p}_k - y_k$ is completely symmetric with respect to all non-target classes. The network receives zero mathematical incentive to prefer a harmless off-by-one error over a life-threatening off-by-four error.
-
-#### 2) Variant B: Consistent Rank Logits (CORAL) and Its Empirical Breakdown
-The CORAL framework [8] reformulates the 5-class ordinal problem into $K - 1 = 4$ binary classification subproblems. For true grade $y \in \{0, 1, 2, 3, 4\}$, binary labels $r_k \in \{0, 1\}$ indicate whether severity exceeds rank $k$:
+#### 2) Variant B: Consistent Rank Logits (CORAL)
+CORAL [8] decomposes the 5-class problem into $K - 1 = 4$ binary tasks:
 
 $$r_k = \begin{cases} 1 & \text{if } y > k \\ 0 & \text{otherwise} \end{cases}, \quad k \in \{0, 1, 2, 3\}$$
 
-To guarantee parallel decision boundaries and prevent contradictory thresholds, CORAL shares a single weight vector $\mathbf{w} \in \mathbb{R}^{1280}$ across all four tasks while learning independent threshold biases $b_0, b_1, b_2, b_3$:
+A shared weight vector $\mathbf{w} \in \mathbb{R}^{1280}$ and independent biases $b_k$ form the cumulative probabilities:
 
 $$g_k(\mathbf{x}) = \mathbf{w}^T \phi(\mathbf{x}) + b_k, \quad \hat{P}(y > k \mid \mathbf{x}) = \sigma(g_k(\mathbf{x}))$$
 
-The loss is the unweighted sum of binary cross-entropies:
-
 $$\mathcal{L}_{CORAL} = -\sum_{k=0}^3 \left[ r_k \log \sigma(g_k(\mathbf{x})) + (1 - r_k) \log (1 - \sigma(g_k(\mathbf{x}))) \right]$$
 
-**Why Unweighted CORAL Breaks Down on Imbalanced Medical Data:**  
-In unweighted CORAL, *every training sample updates all 4 binary tasks simultaneously*. In the APTOS dataset, Grade 0 contains 1,263 samples, while Grade 3 contains only 135 samples (9.4x smaller). For the higher thresholds ($k=2, 3$), almost all training samples have target $r_k = 0$. The overwhelming flood of negative gradients from healthy retinas dominates the shared projection vector $\mathbf{w}$, crushing the decision intervals for Grade 3. As a result, unweighted CORAL completely failed on Grade 3 Severe NPDR (0.0% recall, 26.4% catastrophic error rate).
+In unweighted CORAL, every sample updates all four binary tasks. In our imbalanced dataset (Grade 0: 1,263 vs. Grade 3: 135), negative gradients from healthy retinas dominate the shared projection $\mathbf{w}$, leading to empirical collapse on Grade 3 (0.0% recall).
 
 #### 3) Variant C: Continuous Regression with Smooth L1 Loss
-Continuous regression maps the embedding $\phi(\mathbf{x})$ directly to a continuous scalar prediction $\hat{s} \in \mathbb{R}$:
+Continuous regression maps $\phi(\mathbf{x})$ to a scalar $\hat{s} \in \mathbb{R}$:
 
 $$\hat{s} = \mathbf{w}^T \phi(\mathbf{x}) + b$$
 
-To avoid gradient explosion from noisy outliers while retaining smooth quadratic convergence near the correct grade, the model is trained with Smooth L1 loss:
+The network is trained with Smooth L1 loss:
 
 $$\mathcal{L}_{SmoothL1}(y, \hat{s}) = \begin{cases} 0.5 (y - \hat{s})^2 & \text{if } |y - \hat{s}| < 1.0 \\ |y - \hat{s}| - 0.5 & \text{otherwise} \end{cases}$$
 
-At test time, the continuous scalar is clipped to $[0.0, 4.0]$ and rounded: $\hat{y} = \text{round}(\text{clip}(\hat{s}, 0.0, 4.0))$. Because the loss scales with distance, large multi-grade errors are penalized severely, effectively suppressing catastrophic triage failures.
+Discrete predictions are obtained by clipping and rounding: $\hat{y} = \text{round}(\text{clip}(\hat{s}, 0.0, 4.0))$. Distance penalties reduce large multi-grade errors.
 
-#### 4) Variant D (CORN): Conditional Ordinal Regression with Class-Balanced Weights and Soft-QWK Loss
-To rescue ordinal regression from the breakdown observed in CORAL, we implement the Conditional Ordinal Regression for Neural Networks (CORN) framework [13].
-
-**The Conditional Probability Formulation:**  
-Instead of predicting unconditioned cumulative probabilities, CORN models the step-by-step conditional probability of exceeding rank $k$, given that the previous rank was already reached:
+#### 4) Variant D (CORN): Conditional Ordinal Regression with Class Weighting
+CORN [13] models the conditional probability of exceeding rank $k$, given that rank $k-1$ was reached:
 
 $$q_k(\mathbf{x}) = P(y > k \mid y > k-1) = \sigma(g_k(\mathbf{x})), \quad k \in \{0, 1, 2, 3\}$$
 
-By the probability chain rule, the unconditional cumulative probability is the running product of conditional terms:
+Unconditional cumulative probabilities follow via the product rule:
 
 $$P(y > k \mid \mathbf{x}) = \prod_{j=0}^k q_j(\mathbf{x})$$
 
-**Selective Task Subsetting (Isolating the Minority Class):**  
-The crucial mathematical innovation of CORN is that an instance with label $y$ participates *only* in binary tasks up to its own label condition:
+A sample with label $y$ participates only in binary tasks up to its label:
 
 $$\mathcal{L}_{CORN}(\mathbf{x}, y) = \frac{1}{\min(y+1, K-1)} \sum_{k=0}^{\min(y, K-2)} \text{BCE}(g_k(\mathbf{x}), \mathbb{I}(y > k))$$
 
-A healthy patient ($y = 0$) updates *only* task 0 ($y > 0$). They generate zero gradient on tasks 1, 2, and 3. Consequently, the rare examples of Severe NPDR ($y=3$) and Proliferative DR ($y=4$) are fully protected from being drowned out by the healthy majority cohort.
+To counteract remaining imbalance, we incorporate effective-number class weighting (Cui et al. [14], $\beta = 0.9999$): $W_0 = 0.2269, W_1 = 1.0529, W_2 = 0.3987, W_3 = 2.0075, W_4 = 1.3140$, alongside differentiable Soft-QWK loss regularization:
 
-**Effective Number of Samples Loss Weighting (Cui et al. [14]):**  
-To handle the remaining imbalance without generating fake SMOTE pixels, we apply effective-number class weighting:
+$$\mathcal{L}_{total} = \mathcal{L}_{CORN} + \lambda_{QWK} \cdot \mathcal{L}_{SoftQWK}, \quad \lambda_{QWK} = 0.20$$
 
-$$W_c = \frac{1 - \beta}{1 - \beta^{n_c}}, \quad \text{normalized such that } \sum_{c=0}^4 W_c = 5$$
-
-Setting $\beta = 0.9999$ yields normalized weights:
-- Grade 0: $W_0 = 0.2269$
-- Grade 1: $W_1 = 1.0529$
-- Grade 2: $W_2 = 0.3987$
-- Grade 3 (Severe NPDR): $W_3 = 2.0075$
-- Grade 4 (Proliferative DR): $W_4 = 1.3140$
-
-This elevates gradient attention on Grade 3 cases by nearly 9x relative to Grade 0. Furthermore, a `WeightedRandomSampler` at the DataLoader level ensures minority classes are sampled regularly throughout each epoch.
-
-**Differentiable Soft-QWK Loss Regularization:**  
-To align training directly with our clinical target metric, we compute soft class probabilities $P(y = k)$ from the cumulative products:
-
-$$P(y = 0) = 1 - P(y > 0), \quad P(y = k) = P(y > k-1) - P(y > k), \quad P(y = 4) = P(y > 3)$$
-
-Over each mini-batch, the soft observed confusion matrix $\mathbf{O}$ and chance agreement matrix $\mathbf{E}$ are constructed to form a differentiable Soft-QWK loss:
-
-$$\mathcal{L}_{SoftQWK} = \frac{\sum_{i,j} w_{i,j} O_{i,j}}{\sum_{i,j} w_{i,j} E_{i,j} + \epsilon}, \quad w_{i,j} = \frac{(i - j)^2}{(K - 1)^2}$$
-
-The total optimization objective is:
-
-$$\mathcal{L}_{total} = \mathcal{L}_{CORN} + \lambda_{QWK} \cdot \mathcal{L}_{SoftQWK}, \quad \text{with } \lambda_{QWK} = 0.20$$
-
-#### 5) Optimizing Raw Classification Accuracy: Label Smoothing, Logit Adjustment, and Ensembling
-For telemedicine scenarios where raw classification accuracy ($\ge 80\%$) and high specificity are paramount, we implement an accuracy-centric optimization suite:
-- **Cross-Entropy with Label Smoothing:** Rather than forcing one-hot confidence, we smooth targets by $\alpha = 0.08$:
+#### 5) Variant E: 3-Seed Ensemble + TTA with Label Smoothing
+For applications prioritizing overall diagnostic accuracy, we implement a multi-seed ensembled architecture:
+- **Label Smoothing:** Targets are smoothed with $\alpha = 0.08$:
   $$y_k^{LS} = (1 - \alpha) y_k + \frac{\alpha}{K}$$
-  This prevents the network from becoming overconfident on ambiguous retinal lesions and drastically reduces test-set margin errors.
-- **Post-Hoc Logit Adjustment (Menon et al. [15]):** At test time, we adjust unnormalized output logits using the empirical class prior distribution $\pi_y = \frac{n_y}{N_{train}}$:
+  reducing overconfidence on ambiguous retinal lesions.
+- **Multi-Seed Ensembling and TTA:** Three models are trained independently across random seeds $\{42, 43, 44\}$ for 12 epochs each. At inference time, 4-way flip TTA (original, horizontal, vertical, both) is applied, and softmax probabilities are averaged across the three models.
+- **Post-Hoc Logit Adjustment (Sensitivity Analysis):** Unnormalized logits can be adjusted by class priors $\pi_y$:
   $$\tilde{f}_y(\mathbf{x}) = f_y(\mathbf{x}) - \tau \cdot \log(\pi_y)$$
-  where $\tau \ge 0$ is a tunable temperature parameter. Sweeping $\tau$ allows clinicians to smoothly slide along the trade-off curve between overall classification accuracy ($\tau = 0.0$) and minority-tail sensitivity ($\tau = 1.5$) without retraining the model.
-- **Multi-Seed Ensembling with Test-Time Augmentation:** We train three models with label smoothing across random seeds $\{42, 43, 44\}$ for 12 epochs each. At test time, each model evaluates 4-way flip TTA (original, horizontal, vertical, and both). Softmax probability distributions are averaged across all three seeds before applying the final decision rule.
+  where $\tau \ge 0$. In this study, temperature sweeps across $\tau \in \{0.0, 0.5, 1.0, 1.5\}$ are evaluated on the test set strictly as a post-hoc sensitivity analysis to document the accuracy–sensitivity trade-off.
+
+### 6.3 Training and Hyperparameter Configurations
+
+To ensure experimental transparency and reproducibility, Table 2 details the hyperparameter configurations across all five model variants. All models shared an identical pretrained EfficientNet-B0 backbone (5.3M parameters), AdamW optimizer ($lr = 3 \times 10^{-4}$, weight decay $1 \times 10^{-2}$), batch size of 16, and Cosine Annealing learning rate schedule. However, training protocols differed in targeted ways: Variants A–C were trained for 8 epochs under standard augmentations with all layers unfrozen on a single run (seed 42). Variant D (CORN) introduced early-block freezing (stages 0–3 frozen to stabilize low-level edge features), class-balanced effective-number weighting, and a WeightedRandomSampler over 8 epochs. Variant E employed an extended 12-epoch training budget per seed, label smoothing ($\alpha = 0.08$), safe-light augmentations, and sequential 3-seed ensembling with test-time augmentation.
+
+#### TABLE 2: Training and Hyperparameter Configurations Across Model Variants
+
+| Hyperparameter / Setting | Variant A (Softmax) | Variant B (CORAL) | Variant C (Regression) | Variant D (CORN) | Variant E (Ensemble) |
+|:---|:---:|:---:|:---:|:---:|:---:|
+| **Target Epochs** | 8 | 8 | 8 | 8 | 12 (per seed) |
+| **Optimizer** | AdamW | AdamW | AdamW | AdamW | AdamW |
+| **Learning Rate** | $3 \times 10^{-4}$ | $3 \times 10^{-4}$ | $3 \times 10^{-4}$ | $3 \times 10^{-4}$ | $3 \times 10^{-4}$ |
+| **Weight Decay** | $1 \times 10^{-2}$ | $1 \times 10^{-2}$ | $1 \times 10^{-2}$ | $1 \times 10^{-2}$ | $1 \times 10^{-2}$ |
+| **Batch Size** | 16 | 16 | 16 | 16 | 16 |
+| **LR Scheduler** | Cosine Annealing | Cosine Annealing | Cosine Annealing | Cosine Annealing | Cosine Annealing |
+| **Frozen Layers** | None (All unfrozen) | None (All unfrozen) | None (All unfrozen) | Stages 0–3 frozen | None (All unfrozen) |
+| **Augmentation** | Flips, Rot $\pm 25^\circ$, Jitter | Flips, Rot $\pm 25^\circ$, Jitter | Flips, Rot $\pm 25^\circ$, Jitter | Flips, Rot $\pm 25^\circ$, Jitter | Flips, Affine $\pm 15^\circ$, Light Jitter |
+| **Label Smoothing** | None | N/A (Binary BCE) | N/A (Smooth L1) | None | $\alpha = 0.08$ |
+| **Imbalance Strategy** | Natural distribution | Natural distribution | Natural distribution | Cui et al. Weights + Sampler | Natural distribution |
+| **Number of Seeds** | 1 (Seed 42) | 1 (Seed 42) | 1 (Seed 42) | 1 (Seed 42) | 3 (Seeds 42, 43, 44) |
 
 ---
 
 ## 7. RESULTS
 
-All models were evaluated on the locked holdout test set of 550 images. None of these images were encountered during model training or hyperparameter selection.
+All models were evaluated on the locked holdout test set of 550 images, which was not used during training or checkpoint selection.
 
 ### 7.1 Comprehensive Comparison Across Model Variants
 
-Table 2 presents the complete performance comparison across the four primary paradigms. Table 3 breaks down diagnostic sensitivity, precision, and F1-scores with 95% non-parametric bootstrap confidence intervals (1,000 resamples).
+Table 3 presents the complete performance comparison across all five paradigms. Table 4 breaks down sensitivity, precision, and F1-scores with 95% bootstrap confidence intervals (1,000 resamples).
 
-#### TABLE 2: Comprehensive Performance Comparison Across Model Variants on APTOS 2019 Holdout Test Set (N = 550)
+#### TABLE 3: Comprehensive Performance Comparison Across Model Variants on APTOS 2019 Holdout Test Set (N = 550)
 
-| Model Variant | QWK (Primary) [95% CI] | Accuracy (%) | MAE [95% CI] | Severe Error ($d \ge 2$) [95% CI] | Severe F1 (Grade 3) | PDR F1 (Grade 4) | Exact Match ($d=0$) | Off-by-1 ($d=1$) |
-|:---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| **Variant A: Softmax Baseline** | **0.8724** [0.8385, 0.9044] | **80.18%** | **0.2673** [0.2182, 0.3200] | **5.6%** [3.6%, 7.6%] | 0.3791 [0.2221, 0.5313] | 0.5147 [0.3830, 0.6377] | 80.2% | 14.2% |
-| **Variant B: CORAL Ordinal** | **0.7273** [0.6874, 0.7641] | **59.64%** | **0.6964** [0.6200, 0.7710] | **26.4%** [22.9%, 30.2%] | 0.0000 [0.0000, 0.0000] | 0.3692 [0.2857, 0.4502] | 59.6% | 14.0% |
-| **Variant C: Continuous Regression** | **0.8788** [0.8490, 0.9039] | **75.64%** | **0.2873** [0.2400, 0.3364] | **3.8%** [2.4%, 5.5%] | 0.2528 [0.1333, 0.3704] | 0.3589 [0.2034, 0.5067] | 75.6% | 20.5% |
-| **Variant D (CORN): Conditional Ordinal + Soft-QWK** | **0.8482** [0.8150, 0.8792] | **69.09%** | **0.3764** [0.3200, 0.4291] | **5.1%** [3.3%, 7.1%] | **0.2724** [0.1746, 0.3735] | **0.4584** [0.3124, 0.5909] | 69.1% | 25.8% |
+| Model Variant | QWK (Primary) [95% CI] | Accuracy (%) | MAE [95% CI] | Catastrophic Error ($d \ge 2$) [95% CI] | Severe F1 (Grade 3) | PDR F1 (Grade 4) | Exact Match ($d=0$) | Off-by-1 ($d=1$) |
+|:---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| **Variant A: Softmax Baseline** | 0.8724 [0.8385, 0.9044] | 80.18% | 0.2673 [0.2182, 0.3200] | 5.64% [3.64%, 7.64%] | 0.3810 [0.2221, 0.5313] | 0.5169 [0.3830, 0.6377] | 80.2% | 14.2% |
+| **Variant B: CORAL Ordinal** | 0.7273 [0.6874, 0.7641] | 59.64% | 0.6964 [0.6200, 0.7710] | 26.40% [22.90%, 30.20%] | 0.0000 [0.0000, 0.0000] | 0.3692 [0.2857, 0.4502] | 59.6% | 14.0% |
+| **Variant C: Continuous Regression** | 0.8788 [0.8490, 0.9039] | 75.64% | 0.2873 [0.2400, 0.3364] | **3.80%** [2.40%, 5.50%] | 0.2528 [0.1333, 0.3704] | 0.3589 [0.2034, 0.5067] | 75.6% | 20.5% |
+| **Variant D (CORN): Conditional Ordinal** | 0.8482 [0.8150, 0.8792] | 69.09% | 0.3764 [0.3200, 0.4291] | 5.10% [3.30%, 7.10%] | 0.2724 [0.1746, 0.3735] | 0.4584 [0.3124, 0.5909] | 69.1% | 25.8% |
+| **Variant E: 3-Seed Ensemble + TTA** | **0.8859** [0.8503, 0.9170] | **83.82%** | **0.2200** [0.1727, 0.2691] | 4.36% [2.73%, 6.18%] | **0.4561** [0.2999, 0.6134] | **0.5570** [0.4179, 0.6739] | **83.8%** | **11.8%** |
 
-#### TABLE 3: Per-Class Diagnostic Performance with 95% Bootstrap Confidence Intervals (1,000 Resamples)
+*Note: Best value in each column is shown in bold. Quadratic Weighted Kappa (QWK) is the primary clinical ordinal metric. Variant E catastrophic error is 4.36%.*
+
+#### TABLE 4: Per-Class Diagnostic Performance with 95% Bootstrap Confidence Intervals (1,000 Resamples)
 
 | Class Grade | Model Variant | Recall / Sensitivity [95% CI] | Precision [95% CI] | F1-Score [95% CI] |
 |:---|:---|:---:|:---:|:---:|
 | **0 (No DR)** | Variant A (Softmax Baseline) | 97.1% [94.9%, 98.9%] | 96.7% [94.5%, 98.6%] | 0.9690 [0.9541, 0.9825] |
-| | Variant B (CORAL Ordinal) | 100.0% [100.0%, 100.0%] | 74.9% [70.7%, 79.3%] | 0.8560 [0.8281, 0.8843] |
+| | Variant B (CORAL Ordinal) | **100.0%** [100.0%, 100.0%] | 74.9% [70.7%, 79.3%] | 0.8560 [0.8281, 0.8843] |
 | | Variant C (Continuous Regression) | 96.7% [94.4%, 98.6%] | 96.0% [93.5%, 98.1%] | 0.9635 [0.9478, 0.9779] |
-| | **Variant D (CORN)** | **97.4%** [95.4%, 99.2%] | **95.7%** [93.3%, 97.9%] | **0.9655** [0.9502, 0.9799] |
+| | Variant D (CORN) | 97.4% [95.4%, 99.2%] | 95.7% [93.3%, 97.9%] | 0.9655 [0.9502, 0.9799] |
+| | **Variant E (3-Seed Ensemble + TTA)** | 98.2% [96.4%, 99.6%] | 96.0% [93.7%, 98.0%] | **0.9708** [0.9569, 0.9837] |
 | **1 (Mild NPDR)** | Variant A (Softmax Baseline) | 55.5% [42.4%, 68.4%] | 59.7% [46.8%, 73.3%] | 0.5728 [0.4602, 0.6777] |
 | | Variant B (CORAL Ordinal) | 1.8% [0.0%, 6.1%] | 42.3% [0.0%, 100.0%] | 0.0344 [0.0000, 0.1132] |
 | | Variant C (Continuous Regression) | 50.2% [37.7%, 63.6%] | 50.9% [37.5%, 63.5%] | 0.5035 [0.3860, 0.6087] |
-| | **Variant D (CORN)** | **66.1%** [52.6%, 79.2%] | **47.6%** [36.5%, 59.3%] | **0.5515** [0.4409, 0.6491] |
+| | Variant D (CORN) | **66.1%** [52.6%, 79.2%] | 47.6% [36.5%, 59.3%] | 0.5515 [0.4409, 0.6491] |
+| | **Variant E (3-Seed Ensemble + TTA)** | 46.4% [33.3%, 59.6%] | **72.2%** [58.6%, 86.5%] | 0.5652 [0.4367, 0.6800] |
 | **2 (Moderate NPDR)** | Variant A (Softmax Baseline) | 74.6% [67.3%, 81.9%] | 76.3% [69.0%, 83.1%] | 0.7538 [0.6978, 0.8053] |
 | | Variant B (CORAL Ordinal) | 11.9% [7.0%, 17.5%] | 71.9% [52.9%, 88.9%] | 0.2039 [0.1241, 0.2857] |
 | | Variant C (Continuous Regression) | 68.5% [60.6%, 75.8%] | 72.6% [64.4%, 80.0%] | 0.7044 [0.6370, 0.7638] |
-| | **Variant D (CORN)** | **28.0%** [21.1%, 35.3%] | **81.0%** [69.8%, 91.3%] | **0.4151** [0.3284, 0.5000] |
-| **3 (Severe NPDR)** | Variant A (Softmax Baseline) | 41.7% [23.3%, 60.0%] | 35.4% [20.0%, 51.6%] | 0.3791 [0.2221, 0.5313] |
+| | Variant D (CORN) | 28.0% [21.1%, 35.3%] | **81.0%** [69.8%, 91.3%] | 0.4151 [0.3284, 0.5000] |
+| | **Variant E (3-Seed Ensemble + TTA)** | **89.3%** [84.1%, 94.0%] | 77.0% [70.6%, 83.3%] | **0.8272** [0.7782, 0.8682] |
+| **3 (Severe NPDR)** | Variant A (Softmax Baseline) | 41.7% [23.3%, 60.0%] | 35.4% [20.0%, 51.6%] | 0.3810 [0.2221, 0.5313] |
 | | Variant B (CORAL Ordinal) | 0.0% [0.0%, 0.0%] | 0.0% [0.0%, 0.0%] | 0.0000 [0.0000, 0.0000] |
 | | Variant C (Continuous Regression) | 38.4% [20.0%, 56.8%] | 19.1% [9.2%, 29.0%] | 0.2528 [0.1333, 0.3704] |
-| | **Variant D (CORN)** | **65.7%** [48.3%, 82.9%] | **17.3%** [10.6%, 24.8%] | **0.2724** [0.1746, 0.3735] |
-| **4 (Proliferative DR)** | Variant A (Softmax Baseline) | 52.3% [37.2%, 67.3%] | 51.2% [36.6%, 65.1%] | 0.5147 [0.3830, 0.6377] |
-| | Variant B (CORAL Ordinal) | 86.3% [75.6%, 95.1%] | 23.6% [17.2%, 30.2%] | 0.3692 [0.2857, 0.4502] |
+| | Variant D (CORN) | **65.7%** [48.3%, 82.9%] | 17.3% [10.6%, 24.8%] | 0.2724 [0.1746, 0.3735] |
+| | **Variant E (3-Seed Ensemble + TTA)** | 44.8% [27.8%, 64.0%] | **46.4%** [29.6%, 65.4%] | **0.4561** [0.2999, 0.6134] |
+| **4 (Proliferative DR)** | Variant A (Softmax Baseline) | 52.3% [37.2%, 67.3%] | 51.2% [36.6%, 65.1%] | 0.5169 [0.3830, 0.6377] |
+| | Variant B (CORAL Ordinal) | **86.3%** [75.6%, 95.1%] | 23.6% [17.2%, 30.2%] | 0.3692 [0.2857, 0.4502] |
 | | Variant C (Continuous Regression) | 27.1% [14.3%, 41.7%] | 54.6% [33.3%, 75.0%] | 0.3589 [0.2034, 0.5067] |
-| | **Variant D (CORN)** | **41.0%** [26.2%, 55.1%] | **52.8%** [36.8%, 69.4%] | **0.4584** [0.3124, 0.5909] |
+| | Variant D (CORN) | 41.0% [26.2%, 55.1%] | 52.8% [36.8%, 69.4%] | 0.4584 [0.3124, 0.5909] |
+| | **Variant E (3-Seed Ensemble + TTA)** | 50.0% [35.7%, 64.9%] | **62.9%** [47.2%, 77.8%] | **0.5570** [0.4179, 0.6739] |
 
 ### 7.2 Confusion Matrix and Error Distribution Analysis
 
-Fig. 4 shows the side-by-side confusion matrices for all four models, and Fig. 5 illustrates the prediction error distance histograms ($|y - \hat{y}|$).
+Fig. 4 shows the side-by-side confusion matrices across all five models, and Fig. 5 displays prediction error distance distributions ($|y - \hat{y}|$).
 
-![Side-by-Side Confusion Matrices on the Holdout Test Set (N = 550) for Variant A (Softmax Baseline), Variant B (CORAL Ordinal), Variant C (Continuous Regression), and Variant D (CORN).](submission/results/all_confusion_matrices.png)
+![Side-by-Side Confusion Matrices on the Holdout Test Set (N = 550) for Variant A (Softmax Baseline), Variant B (CORAL Ordinal), Variant C (Continuous Regression), Variant D (CORN), and Variant E (3-Seed Ensemble + TTA).](submission/results/all_confusion_matrices.png)
 
-![Prediction Error Distance Distribution ($|y - \hat{y}| \in \{0, 1, 2, 3, 4\}$) across the 550 Holdout Test Images comparing All Four Model Variants.](submission/results/error_distance_histogram.png)
+![Prediction Error Distance Distribution across the 550 Holdout Test Images comparing All Five Model Variants with corresponding MAE metrics.](submission/results/error_distance_histogram.png)
 
-Key observations from the confusion matrices and histograms:
-- **The CORAL Breakdown (Second Panel):** Grade 1, 2, and 3 predictions are severely pulled down into Grade 0. Fully 26.4% of patients suffered catastrophic multi-grade misclassifications ($d \ge 2$), and Grade 3 sensitivity collapsed entirely to 0.0%.
-- **The CORN Breakthrough (Fourth Panel):** Conditioning probabilities and weighting samples restored high diagonal density. Severe NPDR recall surged to **65.7%**, and catastrophic multi-grade errors dropped to just **5.1%**. A total of **94.9%** of all predictions landed within $\pm 1$ grade of true diagnosis.
-- **Continuous Regression (Third Panel):** Yielded the tightest error distribution, with **96.1%** of predictions within $\pm 1$ grade and the lowest catastrophic error rate of **3.8%**.
+Key observations:
+- **Variant E (Fifth Panel):** Exhibits high diagonal concentration, achieving an exact-match rate of **83.8%** and holding off-by-one errors to **11.8%**, matching the lowest single-seed MAE (**0.2200**) with the highest overall accuracy (**83.82%**).
+- **Variant D (Fourth Panel):** Achieves the highest recall on Grade 3 Severe NPDR (**65.7%**), preventing the diagnostic omissions seen in Variant B.
+- **Variant C (Third Panel):** Bounds catastrophic multi-grade triage errors ($d \ge 2$) to **3.8%**, yielding the lowest catastrophic error rate.
+- **Variant B (Second Panel):** Demonstrates severe class collapse, with 26.40% catastrophic errors and 0.0% Grade 3 recall.
 
 ### 7.3 Statistical Significance Testing
 
 Paired bootstrap tests (1,000 iterations) and Wilcoxon signed-rank tests confirmed:
-- **Variant D (CORN) vs. Variant B (CORAL):** $\Delta QWK = +0.1212$ (95% CI: $[+0.0924, +0.1504]$, $p < 0.001$). The Wilcoxon signed-rank test on error distances yielded $W = 4180.0, p = 9.35 \times 10^{-21}$. The improvement of Variant D (CORN) over CORAL is statistically decisive.
-- **Variant C (Continuous Regression) vs. Softmax Baseline:** $\Delta QWK = +0.0062$ (95% CI: $[-0.0142, +0.0265]$, $p = 0.264$), while reducing catastrophic errors from 5.6% to 3.8%.
+- **Variant E vs. Variant A (Softmax Baseline):** $\Delta QWK = +0.0135$ (95% CI: $[-0.0113, +0.0383]$, $p = 0.1230$) and $\Delta \text{Accuracy} = +3.64\%$ (95% CI: $[+1.09\%, +6.18\%]$, $p = 0.0050$). A Wilcoxon signed-rank test on absolute error distances confirmed a statistically significant reduction in prediction error ($W = 625.0, p = 0.0152$).
+- **Variant D (CORN) vs. Variant B (CORAL):** $\Delta QWK = +0.1212$ (95% CI: $[+0.0924, +0.1504]$, $p < 0.001$), with Wilcoxon $W = 4180.0, p = 9.35 \times 10^{-21}$, confirming substantial minority-class improvement.
+- **Variant C vs. Variant A:** $\Delta QWK = +0.0062$ (95% CI: $[-0.0142, +0.0265]$, $p = 0.2640$).
 
-### 7.4 Accuracy Enhancement: Label Smoothing, Ensembling, and Logit Adjustment
+### 7.4 Multi-Seed Ensemble and Sensitivity Analysis
 
-Table 4 presents the results of our accuracy optimization experiments, and Table 5 provides the temperature sweep for post-hoc logit adjustment.
+Table 5 details individual seed performances, single-seed summary statistics, and ensemble configurations. Table 6 documents the temperature sweep for post-hoc logit adjustment, and Fig. 6 displays the confusion matrices across accuracy optimization configurations.
 
-#### TABLE 4: Classification Accuracy Optimization Comparison on Holdout Test Set (N = 550)
+#### TABLE 5: Classification Performance Across Ensemble Configurations on Holdout Test Set (N = 550)
 
-| Model Configuration | Accuracy [95% CI] | QWK [95% CI] | MAE [95% CI] | Catastrophic Err ($d \ge 2$) [95% CI] | Grade 3 Severe F1 [95% CI] | Grade 4 PDR F1 [95% CI] |
+| Model Configuration | Accuracy [95% CI] | QWK [95% CI] | MAE [95% CI] | Catastrophic Error ($d \ge 2$) | Grade 3 Severe F1 | Grade 4 PDR F1 |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Original Variant A (Baseline Softmax)** | 80.18% [76.73%, 83.45%] | 0.8724 [0.8385, 0.9044] | 0.2673 [0.2182, 0.3200] | 5.64% [3.64%, 7.64%] | 0.3810 [0.2221, 0.5313] | 0.5169 [0.3830, 0.6377] |
-| **Variant A (Single Seed 42 + Label Smooth 0.08)** | 82.00% [78.73%, 85.10%] | 0.8709 [0.8330, 0.9039] | 0.2473 [0.1982, 0.3000] | 5.27% [3.45%, 7.27%] | 0.4828 [0.3225, 0.6452] | 0.5195 [0.3662, 0.6364] |
-| **Variant A (Single Seed 42 + Logit Adj $\tau = 1.0$)** | 80.00% [76.73%, 83.46%] | 0.8682 [0.8303, 0.9010] | 0.2673 [0.2145, 0.3200] | 4.91% [3.27%, 6.73%] | 0.4000 [0.2597, 0.5306] | 0.5250 [0.3793, 0.6458] |
-| **3-Seed Ensemble + TTA ($\tau = 0.0$, Raw Acc Focus)** | **83.82%** [80.73%, 86.73%] | **0.8859** [0.8503, 0.9170] | **0.2200** [0.1727, 0.2691] | **4.36%** [2.73%, 6.18%] | 0.4561 [0.2999, 0.6134] | 0.5570 [0.4179, 0.6739] |
-| **3-Seed Ensemble + TTA ($\tau = 1.0$, Logit Adj Focus)** | 79.27% [76.00%, 82.55%] | 0.8787 [0.8451, 0.9091] | 0.2691 [0.2200, 0.3164] | 4.55% [2.73%, 6.36%] | 0.3721 [0.2432, 0.5056] | **0.5778** [0.4444, 0.6875] |
+| **Variant A (Baseline Softmax)** | 80.18% [76.73%, 83.45%] | 0.8724 [0.8385, 0.9044] | 0.2673 [0.2182, 0.3200] | 5.64% [3.64%, 7.64%] | 0.3810 [0.2221, 0.5313] | 0.5169 [0.3830, 0.6377] |
+| **Single Seed 42 (LS 0.08)** | 82.00% [78.73%, 85.10%] | 0.8709 [0.8330, 0.9039] | 0.2473 [0.1982, 0.3000] | 5.27% [3.45%, 7.27%] | 0.4828 [0.3225, 0.6452] | 0.5195 [0.3662, 0.6364] |
+| **Single Seed 43 (LS 0.08)** | 82.73% [79.45%, 85.82%] | 0.8846 [0.8501, 0.9165] | 0.2291 [0.1818, 0.2800] | 4.18% [2.73%, 5.82%] | 0.4068 [0.2456, 0.5667] | 0.5316 [0.3929, 0.6512] |
+| **Single Seed 44 (LS 0.08)** | 83.45% [80.18%, 86.55%] | 0.8901 [0.8562, 0.9198] | 0.2200 [0.1764, 0.2691] | 4.18% [2.55%, 5.82%] | 0.5085 [0.3333, 0.6667] | 0.6000 [0.4615, 0.7161] |
+| **Single-Seed Mean $\pm$ SD** | 82.73% $\pm$ 0.73% | 0.8819 $\pm$ 0.0099 | 0.2321 $\pm$ 0.0139 | 4.54% $\pm$ 0.63% | 0.4660 $\pm$ 0.0529 | 0.5504 $\pm$ 0.0434 |
+| **Variant E: 3-Seed Ens + TTA ($\tau = 0.0$)** | **83.82%** [80.73%, 86.73%] | 0.8859 [0.8503, 0.9170] | **0.2200** [0.1727, 0.2691] | 4.36% [2.73%, 6.18%] | 0.4561 [0.2999, 0.6134] | 0.5570 [0.4179, 0.6739] |
+| **Variant E: 3-Seed Ens + TTA ($\tau = 1.0$)** | 79.27% [76.00%, 82.55%] | 0.8787 [0.8451, 0.9091] | 0.2691 [0.2200, 0.3164] | 4.55% [2.73%, 6.36%] | 0.3721 [0.2432, 0.5056] | **0.5778** [0.4444, 0.6875] |
 
-#### TABLE 5: Post-Hoc Logit Adjustment Temperature Sweep on 3-Seed Ensemble
+*Note: Single-seed summary reports mean $\pm$ sample SD ($n=3$, $ddof=1$). Seed 44 alone achieves QWK 0.8901, MAE 0.2200, and 4.18% catastrophic error. Best value in each column is shown in bold.*
 
-| Logit Adjustment Temperature ($\tau$) | Accuracy | QWK | MAE | Severe Recall (Grade 3) | PDR Recall (Grade 4) |
+#### TABLE 6: Post-Hoc Logit Adjustment Temperature Sweep on 3-Seed Ensemble (Sensitivity Analysis)
+
+| Temperature ($\tau$) | Accuracy | QWK | MAE | Severe Recall (Grade 3) | PDR Recall (Grade 4) |
 | :---: | :---: | :---: | :---: | :---: | :---: |
 | **0.0 (Unadjusted, Raw Acc Focus)** | **83.82%** | 0.8859 | **0.2200** | 44.8% | 50.0% |
 | **0.5 (Balanced Trade-off)** | 82.18% | **0.8929** | 0.2291 | 51.7% | 56.8% |
@@ -352,82 +327,98 @@ Table 4 presents the results of our accuracy optimization experiments, and Table
 
 ![Confusion Matrices for Accuracy Optimization Configurations on the Holdout Test Set (N = 550) comparing Baseline Softmax, Label-Smoothed Seed 42, and 3-Seed Ensembles (tau = 0.0 and tau = 1.0).](submission/results/confusion_matrix_accuracy_ensemble.png)
 
-Key insights from the accuracy optimization experiments:
-- **Single Model Gains:** Adding label smoothing ($\alpha = 0.08$) and safe geometric jitter increased single-model accuracy from 80.18% to **82.00%** (+1.82%).
-- **Ensemble Peak:** Combining three random seeds with 4-way flip TTA pushed accuracy to **83.82%**, QWK to **0.8859**, and reduced MAE to **0.2200**.
-- **Adjustable Clinical Dial ($\tau$):** Logit adjustment provides a post-hoc slider. At $\tau = 0.5$, QWK peaks at **0.8929** (highest in the study) with 82.18% accuracy. At $\tau = 1.5$, Severe NPDR recall jumps to **69.0%**.
+### 7.5 Granular Per-Grade Diagnostic Dynamics and Clinical Referral Triage
+
+#### Per-Grade Diagnostic Performance Dynamics
+A granular inspection of per-class metrics (Table 4) reveals that Variant E's accuracy advantage (+3.64% over Variant A) stems predominantly from performance improvements on the two most prevalent classes: Moderate NPDR (Grade 2 recall rising from 74.6% to 89.3%) and No DR (Grade 0 recall improving from 97.1% to 98.2%). In contrast, high-acuity minority grades show negligible gain: Grade 3 Severe NPDR recall increases only marginally from 41.7% to 44.8%, while Grade 4 Proliferative DR recall remains essentially unchanged (50.0% vs. 52.3% in baseline Variant A). Furthermore, Grade 1 Mild NPDR recall drops noticeably from 55.5% to 46.4%, with mild lesions frequently subsumed into the dominant Grade 0 or Grade 2 predictions. Consequently, Variant E functions primarily as a stabilizer for majority disease categories rather than an effective detector for rare sight-threatening lesions.
+
+#### Clinical Referral Triage Performance
+In practical tele-ophthalmology screening, patients with severe or proliferative retinopathy ($y \in \{3, 4\}$) require urgent specialist referral, whereas healthy individuals and early non-proliferative cases ($y \in \{0, 1, 2\}$) are managed via routine community monitoring. We define *under-triage rate* as the proportion of true vision-threatening patients incorrectly classified as non-referral ($\hat{y} \le 2$ when $y \ge 3$), and *over-referral rate* as the proportion of non-referral patients incorrectly routed to tertiary care ($\hat{y} \ge 3$ when $y \le 2$). Table 7 presents the clinical triage performance across all evaluated models on the 550 holdout test images ($N_{\text{severe}} = 73$, $N_{\text{routine}} = 477$).
+
+#### TABLE 7: Clinical Referral Triage Performance Across Model Variants on Holdout Test Set (N = 550)
+
+| Model Variant | Under-Triage Count ($y \ge 3 \to \hat{y} \le 2$) | Under-Triage Rate (%) | Over-Referral Count ($y \le 2 \to \hat{y} \ge 3$) | Over-Referral Rate (%) | Clinical Trade-off Profile |
+|:---|:---:|:---:|:---:|:---:|:---|
+| **Variant A: Softmax Baseline** | 21 / 73 | 28.77% | 27 / 477 | 5.66% | Unweighted multiclass baseline |
+| **Variant B: CORAL Ordinal** | 8 / 73 | 10.96% | 96 / 477 | 20.13% | High false referrals from class collapse |
+| **Variant C: Continuous Regression** | 23 / 73 | 31.51% | 30 / 477 | 6.29% | Conservative; bounds multi-grade drift |
+| **Variant D (CORN): Conditional Ordinal** | 11 / 73 | **15.07%** | 82 / 477 | 17.19% | High-sensitivity screening specialist |
+| **Variant E: 3-Seed Ens + TTA ($\tau = 0.0$)** | 22 / 73 | 30.14% | 12 / 477 | **2.52%** | Minimum false referrals; confirmatory focus |
+| **Variant E: 3-Seed Ens + TTA ($\tau = 1.0$)** | 14 / 73 | 19.18% | 44 / 477 | 9.22% | Balanced trade-off via logit adjustment |
+
+*Note: Sight-threatening cases (Grades 3–4): N = 73; non-referral cases (Grades 0–2): N = 477. Best values in bold.*
+
+### 7.6 Strengths and Limitations of the 3-Seed Ensemble
+
+#### 1) Architectural and Operational Strengths
+1. **High Overall Accuracy and Multi-Seed Stability:** Variant E achieves the highest classification accuracy (**83.82%**, vs. 83.45% for the best single seed), with QWK (**0.8859**) and MAE (**0.2200**) comparable to the best single seed (Seed 44: QWK 0.8901, MAE 0.2200). Its primary benefit is mitigating stochastic training variance across seeds (single-seed mean 82.73% $\rightarrow$ 83.82%) rather than delivering large gains over the top seed.
+2. **Lowest Over-Referral Rate:** Variant E yields the lowest over-referral rate (**2.52%**, 12/477), substantially reducing unnecessary secondary clinic visits and clinic overburden.
+3. **Resource Efficiency and Tunability:** The ensemble reuses the identical 5.3M-parameter EfficientNet-B0 backbone with no external data. Post-hoc logit adjustment provides an adjustable operating curve between accuracy and severe recall without retraining.
+
+#### 2) Clinical and Computational Limitations
+1. **Elevated Under-Triage Rate:** At $\tau = 0.0$, Severe NPDR recall is only 44.8% and under-triage is **30.14%** (22/73 missed severe/PDR cases), compared to 15.07% (11/73) for Variant D.
+2. **Modest Gain Over Best Seed:** The accuracy gain over Seed 44 (83.45% to 83.82%) is small, and individual seeds exhibit competitive QWK (Seed 44: 0.8901) and catastrophic error rates (Seeds 43 and 44: 4.18% vs. 4.36% for the ensemble).
+3. **Inference Overhead:** Evaluating three ensemble members with 4-way TTA requires approximately $3\times$ FLOPs compared to a single forward pass.
+4. **Dataset Scope:** All evaluations are conducted on a single 550-image test split with 29 Severe NPDR cases.
+
+#### 3) Future Research Directions
+Future iterations will evaluate: (a) ensembling heterogeneous backbones (e.g., ConvNeXt with EfficientNet); (b) integrating CORN ordinal heads directly into the ensemble members; (c) higher input resolutions (e.g., 384x384); (d) cross-validation and calibration analysis (ECE); (e) external validation on Messidor-2 and IDRiD; and (f) knowledge distillation into a single compact inference student model.
 
 ---
 
-## 8. SYSTEM DESIGN: ACTIVITY AND CLASS DIAGRAMS
+## 8. PROPOSED SYSTEM DESIGN: ACTIVITY AND CLASS DIAGRAMS
 
-To formalize the dynamic workflow and structural software architecture of the clinical triage platform, we present StarUML-compliant Activity and Class Diagrams.
+To specify the operational flow and software architecture, we present StarUML-compliant Activity and Class Diagrams as a proposed system design.
 
 ### 8.1 UML Activity Diagram
 
-The Activity Diagram defines the operational workflow across three synchronized clinical partitions: Primary Screening Clinic, Automated AI Diagnostic Engine, and Clinical Triage & Specialist Referral.
+The proposed activity diagram (Fig. 7) models workflow coordination across the screening clinic, diagnostic engine, and specialist triage.
 
 ![UML Activity Diagram: Clinical Screening, Automated AI Diagnostic Processing, and Specialist Triage Workflow (StarUML Specification).](submission/results/uml_activity_diagram.png)
 
-#### Detailed Workflow Description:
-1. **Partition 1 (Primary Screening Clinic / Technician):**
-   - The workflow initiates at the handheld or tabletop fundus camera where the technician acquires a digital retinal photograph.
-   - An automated quality assessment algorithm verifies image sharpness, illumination uniformity, and focus.
-   - *Quality Guard Condition:* If the photograph is degraded by lens blur or excessive light reflection (`[No: Blurry / Glare]`), the system triggers an immediate recapture prompt. If acceptable (`[Yes: Valid]`), the stream passes to the AI diagnostic engine.
-2. **Partition 2 (Automated AI Diagnostic Engine):**
-   - The functional retinal globe is segmented via circular crop boundary detection, normalized, and contrast-enhanced using CIE LAB CLAHE on an $8 \times 8$ grid.
-   - The image is processed through the regularized EfficientNet-B0 backbone to extract a dense 1280-dimensional latent embedding $\phi(\mathbf{x})$.
-   - *Dual-Pathway Selection:* The system dynamically routes the embedding based on the clinical environment:
-     - In **Community Screening Mode**, the Variant D (CORN) ordinal head evaluates conditional binary cumulative tasks regularized by Soft-QWK loss to maximize severe disease sensitivity.
-     - In **Telemedicine Confirmatory Mode**, the 3-Seed Ensemble with 4-way flip Test-Time Augmentation (TTA) and label smoothing computes highly calibrated stage probabilities.
-   - Both pathways synchronize through a merge bar, where the clinical distance safety envelope is applied, mathematically suppressing catastrophic multi-grade misclassifications ($|y - \hat{y}| \ge 2$) to below 5.1%.
-3. **Partition 3 (Clinical Triage & Specialist Referral):**
-   - A multi-way decision node routes patients according to ICDR clinical guidelines:
-     - **High-Risk Pathway (`[Grade 3, 4]`):** Dispatches an urgent specialist referral within 48 hours to 2 weeks for laser photocoagulation or anti-VEGF injection.
-     - **Moderate Pathway (`[Grade 2]`):** Schedules a semi-urgent 6-month comprehensive exam and OCT scan.
-     - **Low-Risk Pathway (`[Grade 0, 1]`):** Authorizes primary surveillance with a 12-month recall.
-   - The resulting recommendations are compiled into a standardized FHIR-compliant diagnostic report, securely archived in the hospital Picture Archiving and Communication System (PACS) database, and delivered to the patient and care team via SMS/portal before concluding at the final state.
+The workflow consists of: (1) Image acquisition with technician quality validation; (2) Preprocessing, EfficientNet-B0 feature extraction, and dual-route model evaluation (Variant D for high-sensitivity screening, Variant E for high-accuracy confirmation); (3) Triage routing based on ICDR guidelines, dispatching urgent referrals for Grades 3–4 and structured reports to PACS.
 
 ### 8.2 UML Class Diagram
 
-The Class Diagram documents the object-oriented structure, class hierarchies, and operational methods.
+The class diagram (Fig. 8) specifies the object-oriented software architecture, class hierarchies, and operational methods.
 
-![UML Class Diagram: Object-Oriented Software Architecture, Class Hierarchies, and Interface Methods (StarUML Specification).](submission/results/uml_class_diagram.png)
+![UML Class Diagram: Object-Oriented Software Architecture, Class Hierarchies, and Interface Methods with EnsembleEngine (StarUML Specification).](submission/results/uml_class_diagram.png)
 
-#### Description of Key Classes:
-- **`FundusImage`**: Encapsulates raw image data, acquisition metadata, dimensions, and ground truth labels.
-- **`Preprocessor`**: Provides static methods `circular_crop()` and `apply_clahe()` to clean and enhance fundus photographs.
-- **`EfficientNetBackbone`**: Wraps the convolutional feature extractor, managing layer freezing and forward passes to output latent vectors $\phi(\mathbf{x}) \in \mathbb{R}^{1280}$.
-- **`ModelHead` (Abstract Base Class)**: Defines the common interface `forward()` and `predict_stage()`.
-  - Subclasses: `SoftmaxHead`, `CORALHead`, `CORNHead`, `ContinuousHead`.
-- **`EnsembleEngine`**: Coordinates multi-seed inference, manages flip-based Test-Time Augmentation (TTA), and applies post-hoc logit adjustment via `apply_logit_adjustment(tau)`.
-- **`ClinicalTriageEngine`**: Implements deterministic rule mapping (`evaluate_referral_rule()`), safety checks (`enforce_safety_envelope()`), and dispatches to `DiagnosticReport`.
-- **`DiagnosticReport`**: Structures the final clinical output, containing patient ID, predicted grade, confidence, error safety bounds, and recommended action.
-
----
-
-## 9. FUTURE WORK AND CONCLUSION
-
-### 9.1 Conclusion
-
-In this study, we addressed the critical vulnerability of nominal multiclass loss in automated Diabetic Retinopathy stage grading. Standard categorical cross-entropy treats diagnostic errors with dangerous symmetry, exposing diabetic screening programs to catastrophic multi-grade triage failures. To solve this limitation, we conducted an empirical benchmark comparing standard softmax classification, rank-consistent ordinal regression (CORAL), continuous scalar regression, conditional ordinal regression (CORN), and an accuracy-optimized 3-seed ensemble across an identical EfficientNet-B0 backbone on the APTOS 2019 benchmark.
-
-Our empirical findings establish four core conclusions:
-1. **The CORN Breakthrough:** Conditional ordinal regression resolves the breakdown of unweighted CORAL on minority classes. By conditioning binary cumulative probabilities and integrating effective-number class weighting with differentiable Soft-QWK loss, Variant D (CORN) elevated Severe NPDR sensitivity to **65.7%** (95% CI: [48.3%, 82.9%]) and slashed catastrophic triage errors from 26.4% to just **5.1%**. Most significantly, our lightweight model decisively beats published multi-branch networks (such as Shakibania et al. [2], whose 30M parameter model achieved only 36.84% severe recall) with an absolute +28.86% improvement and 82% fewer parameters.
-2. **Distance-Aware Robustness:** Continuous regression with Smooth L1 loss achieved the tightest error distribution, bounding catastrophic multi-grade triage errors ($d \ge 2$) to just **3.8%** and delivering a QWK of **0.8788**.
-3. **High-Accuracy Confirmatory Pipeline:** Multi-seed ensembling with label smoothing and test-time augmentation achieved a project-high raw classification accuracy of **83.82%** (95% CI: [80.73%, 86.73%]), QWK of **0.8859**, and MAE of **0.2200**, with post-hoc logit adjustment reaching a peak study QWK of **0.8929** at $\tau = 0.5$.
-4. **Hardware and Deployment Efficiency:** By prioritizing mathematical loss formulation over parameter bloat, all models were trained safely within 540 MiB of VRAM on a mobile NVIDIA GeForce RTX 5050 GPU, proving that clinical-grade performance is attainable on cost-effective, portable hardware.
-
-### 9.2 Future Work
-
-Building upon these findings, future research will explore the following directions:
-1. **Multimodal Vision-Language Explanations:** Integrate our conditional ordinal backbone with lightweight vision-language models (e.g., BiomedCLIP) to generate clinician-facing natural language rationales alongside calibrated stage predictions.
-2. **Multi-Center Clinical Validation:** Evaluate cross-cohort generalization across international datasets (Messidor-2, DDR, EyePACS) to test resilience across diverse demographic populations and camera hardware.
-3. **Edge Deployment on Handheld Fundus Cameras:** Quantize the EfficientNet-B0 CORN model to INT8 precision using TensorRT for embedded execution on portable, battery-powered fundus cameras for rural screening camps.
+Key classes include:
+- `FundusImage`: Encapsulates raw image arrays, metadata, and quality scores.
+- `RetinalPreprocessor`: Executes circular cropping, CIE LAB CLAHE, and tensor normalization.
+- `DRModel`: Encapsulates the EfficientNet-B0 backbone and feature projection.
+- `EnsembleEngine`: Coordinates multi-seed inference, manages flip-based TTA, and applies logit adjustment via `apply_logit_adj()`.
+- `CornOrdinalHead`: Evaluates conditional cumulative logits and computes CORN loss.
+- `SoftQWKLoss`: Computes differentiable quadratic kappa approximations.
+- `TriageDecisionSupport`: Implements deterministic referral rules and exports FHIR-compliant diagnostic summaries.
 
 ---
 
-## 10. REFERENCES
+## 9. DISCUSSION AND CLINICAL TRIAGE
+
+Our empirical results demonstrate that no single model configuration universally optimizes all clinical criteria:
+1. **Confirmatory Screening and Triage Efficiency:** Variant E (3-Seed Ensemble + TTA) is optimal when overall classification accuracy (**83.82%**) and high specificity across common grades are required. As quantified in Table 7, Variant E achieves the lowest over-referral rate (**2.52%**, 12/477), minimizing unnecessary hospital visits and reducing clinical burden on overstretched eye clinics. However, its unadjusted under-triage rate (**30.14%**) necessitates post-hoc logit adjustment ($\tau = 1.0$, reducing under-triage to 19.18%) or dual-route screening when deployed for primary screening.
+2. **Early Disease Detection and Sight Preservation:** Variant D (CORN) is preferable when maximizing sensitivity for vision-threatening Severe NPDR (**65.7%**) and minimizing missed sight-threatening diagnoses is paramount, reducing under-triage to **15.07%** (11/73).
+3. **Safety Envelope:** Variant C (Continuous Regression) provides the lowest catastrophic multi-grade error rate (**3.8%**).
+
+Deploying automated AI screening in real-world clinical practice requires selecting architectures and loss formulations aligned with specific institutional triage priorities and risk thresholds.
+
+---
+
+## 10. CONCLUSION
+
+In this study, we addressed the limitation of nominal cross-entropy in Diabetic Retinopathy staging. Evaluating nominal, regression, ordinal, and ensembled paradigms on the APTOS 2019 benchmark using an EfficientNet-B0 backbone yielded three principal conclusions:
+
+1. **Featured High-Accuracy Ensemble:** **Variant E: 3-Seed Ensemble + TTA** achieved the project's highest classification accuracy (**83.82%**, 95% CI: [80.73%, 86.73%], vs. 83.45% for the best single seed), with QWK (**0.8859**) and MAE (**0.2200**) comparable to the best single seed, reducing stochastic initialization variance across seeds (single-seed mean 82.73% $\rightarrow$ 83.82%) while maintaining a catastrophic triage error rate of **4.36%**. Post-hoc logit adjustment reached a peak QWK of **0.8929** at $\tau = 0.5$ in sensitivity testing.
+2. **Minority-Class Protection:** Variant D (CORN) resolved the minority collapse of unweighted CORAL, attaining **65.7%** Severe NPDR sensitivity (vs. 36.84% reported by Shakibania et al. [2], different dataset and task setting; not a head-to-head comparison) with an 82% smaller parameter footprint.
+3. **Distance Regularization:** Continuous regression (Variant C) achieved the tightest error distribution, holding catastrophic multi-grade errors to **3.8%**.
+
+All models operate on lightweight 5.3M-parameter backbones on consumer laptop hardware under 1 GB of VRAM. Future work will investigate cross-cohort validation, heterogeneous ensembling, and knowledge distillation.
+
+---
+
+## 11. REFERENCES
 
 [1] N. E. M. Khalifa, M. H. N. Taha, A. E. Hassanien, and I. M. Selim, "Deep transfer learning models for medical diabetic retinopathy detection," Acta Inform. Med., vol. 27, no. 5, pp. 327–331, Dec. 2019, doi: 10.5455/aim.2019.27.327-331.
 

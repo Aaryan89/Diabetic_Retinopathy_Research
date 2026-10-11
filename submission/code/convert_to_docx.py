@@ -196,12 +196,12 @@ def convert_markdown_to_docx(md_path, docx_path, base_image_dir="."):
     """Converts markdown file into an IEEE-formatted DOCX with native OMML equations."""
     doc = docx.Document()
 
-    # Set page margins (0.75 inch for academic paper feel, 7.0 inch printable width)
+    # Set page margins (0.60 inch vertical, 0.65 inch horizontal for compact IEEE academic layout)
     for section in doc.sections:
-        section.top_margin = Inches(0.75)
-        section.bottom_margin = Inches(0.75)
-        section.left_margin = Inches(0.75)
-        section.right_margin = Inches(0.75)
+        section.top_margin = Inches(0.60)
+        section.bottom_margin = Inches(0.60)
+        section.left_margin = Inches(0.65)
+        section.right_margin = Inches(0.65)
 
     with open(md_path, 'r', encoding='utf-8') as f:
         lines = f.readlines()
@@ -289,26 +289,28 @@ def convert_markdown_to_docx(md_path, docx_path, base_image_dir="."):
             if os.path.exists(img_full_path):
                 p_img = doc.add_paragraph()
                 p_img.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                p_img.paragraph_format.space_before = Pt(8)
-                p_img.paragraph_format.space_after = Pt(3)
+                p_img.paragraph_format.space_before = Pt(4)
+                p_img.paragraph_format.space_after = Pt(2)
                 run_img = p_img.add_run()
                 
                 # Proportional image scaling
                 img_name = os.path.basename(img_full_path).lower()
                 if "uml_activity" in img_name:
-                    pic_width = Inches(5.0)
+                    pic_width = Inches(3.6)
                 elif "class_distribution" in img_name or "error_distance" in img_name:
-                    pic_width = Inches(4.8)
+                    pic_width = Inches(3.8)
                 elif "sample_images" in img_name:
-                    pic_width = Inches(5.2)
-                elif "all_confusion" in img_name or "confusion_matrix" in img_name:
-                    pic_width = Inches(5.4)
+                    pic_width = Inches(4.0)
+                elif "all_confusion" in img_name:
+                    pic_width = Inches(4.3)
+                elif "confusion_matrix" in img_name:
+                    pic_width = Inches(3.8)
                 elif "system_architecture" in img_name:
-                    pic_width = Inches(5.3)
+                    pic_width = Inches(4.0)
                 elif "uml_class" in img_name:
-                    pic_width = Inches(5.4)
+                    pic_width = Inches(4.0)
                 else:
-                    pic_width = Inches(5.0)
+                    pic_width = Inches(3.8)
                     
                 run_img.add_picture(img_full_path, width=pic_width)
 
@@ -317,8 +319,8 @@ def convert_markdown_to_docx(md_path, docx_path, base_image_dir="."):
                 p_cap = doc.add_paragraph()
                 p_cap.alignment = WD_ALIGN_PARAGRAPH.CENTER
                 p_cap.paragraph_format.space_before = Pt(0)
-                p_cap.paragraph_format.space_after = Pt(10)
-                add_formatted_runs(p_cap, f"Fig. {figure_counter}. {clean_cap}", base_font_size=Pt(9), base_italic=True, base_color=RGBColor(60, 60, 60))
+                p_cap.paragraph_format.space_after = Pt(6)
+                add_formatted_runs(p_cap, f"Fig. {figure_counter}. {clean_cap}", base_font_size=Pt(8.5), base_italic=True, base_color=RGBColor(60, 60, 60))
                 figure_counter += 1
             else:
                 p_err = doc.add_paragraph(f"[Image not found: {img_rel_path}]")
@@ -357,8 +359,8 @@ def convert_markdown_to_docx(md_path, docx_path, base_image_dir="."):
         if stripped.startswith('## '):
             h_text = stripped[3:].strip()
             p = doc.add_paragraph()
-            p.paragraph_format.space_before = Pt(14)
-            p.paragraph_format.space_after = Pt(4)
+            p.paragraph_format.space_before = Pt(10)
+            p.paragraph_format.space_after = Pt(3)
             p.paragraph_format.keep_with_next = True
             
             if 'ABSTRACT' in h_text.upper():
@@ -381,8 +383,8 @@ def convert_markdown_to_docx(md_path, docx_path, base_image_dir="."):
         if stripped.startswith('### '):
             h_text = stripped[4:].strip()
             p = doc.add_paragraph()
-            p.paragraph_format.space_before = Pt(10)
-            p.paragraph_format.space_after = Pt(3)
+            p.paragraph_format.space_before = Pt(8)
+            p.paragraph_format.space_after = Pt(2)
             p.paragraph_format.keep_with_next = True
             run = p.add_run(h_text)
             run.font.name = 'Times New Roman'
@@ -393,11 +395,22 @@ def convert_markdown_to_docx(md_path, docx_path, base_image_dir="."):
             i += 1
             continue
 
+        # Heading 4 / Subheading (##### Strengths, etc.)
+        if stripped.startswith('##### '):
+            h_text = stripped[6:].strip()
+            p = doc.add_paragraph()
+            p.paragraph_format.space_before = Pt(4)
+            p.paragraph_format.space_after = Pt(1.5)
+            p.paragraph_format.keep_with_next = True
+            add_formatted_runs(p, h_text, base_font_size=Pt(9.5), base_bold=True, base_color=RGBColor(40, 50, 70))
+            i += 1
+            continue
+
         # Heading 3 (#### 1. Khalifa et al., #### TABLE 1, etc.)
         if stripped.startswith('#### '):
             h_text = stripped[5:].strip()
             p = doc.add_paragraph()
-            p.paragraph_format.space_before = Pt(8)
+            p.paragraph_format.space_before = Pt(6)
             p.paragraph_format.space_after = Pt(2)
             p.paragraph_format.keep_with_next = True
             
@@ -424,16 +437,16 @@ def convert_markdown_to_docx(md_path, docx_path, base_image_dir="."):
             p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
             p.paragraph_format.left_indent = Inches(0.3)
             p.paragraph_format.first_line_indent = Inches(-0.3)
-            p.paragraph_format.space_before = Pt(2)
-            p.paragraph_format.space_after = Pt(3)
-            p.paragraph_format.line_spacing = 1.15
+            p.paragraph_format.space_before = Pt(0)
+            p.paragraph_format.space_after = Pt(2)
+            p.paragraph_format.line_spacing = 1.1
             
             run_num = p.add_run(f"[{ref_num}]\t")
             run_num.font.name = 'Times New Roman'
-            run_num.font.size = Pt(9.5)
+            run_num.font.size = Pt(9)
             run_num.font.bold = True
             
-            add_formatted_runs(p, ref_body, base_font_size=Pt(9.5))
+            add_formatted_runs(p, ref_body, base_font_size=Pt(9))
             i += 1
             continue
 
@@ -444,9 +457,9 @@ def convert_markdown_to_docx(md_path, docx_path, base_image_dir="."):
             item_text = bullet_match.group(2)
             p = doc.add_paragraph()
             p.paragraph_format.left_indent = Inches(0.3)
-            p.paragraph_format.space_before = Pt(1)
-            p.paragraph_format.space_after = Pt(2)
-            p.paragraph_format.line_spacing = 1.15
+            p.paragraph_format.space_before = Pt(0)
+            p.paragraph_format.space_after = Pt(1.0)
+            p.paragraph_format.line_spacing = 1.05
             
             run_bullet = p.add_run("• " if marker in ['-', '*'] else f"{marker} ")
             run_bullet.font.name = 'Times New Roman'
@@ -461,8 +474,8 @@ def convert_markdown_to_docx(md_path, docx_path, base_image_dir="."):
         p = doc.add_paragraph()
         p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
         p.paragraph_format.space_before = Pt(0)
-        p.paragraph_format.space_after = Pt(4.5)
-        p.paragraph_format.line_spacing = 1.15
+        p.paragraph_format.space_after = Pt(2.0)
+        p.paragraph_format.line_spacing = 1.05
         add_formatted_runs(p, stripped, base_font_size=Pt(10))
         i += 1
 
@@ -487,7 +500,7 @@ def get_table_column_widths(header_row, num_cols):
         return [0.70, 2.70, 1.80, 1.80], Pt(8.5), (80, 80)
 
     # 2. Table 1: Literature Survey (7 columns)
-    if 'architecture' in hdr_text and 'decisive' in hdr_text:
+    if ('architecture' in hdr_text or 'relation to our work' in hdr_text) and num_cols == 7:
         return [1.05, 1.25, 0.80, 0.65, 0.80, 1.20, 1.25], Pt(7.5), (60, 60)
 
     # 3. Table 2: Model Comparison (9 columns)
@@ -496,15 +509,23 @@ def get_table_column_widths(header_row, num_cols):
         return [1.55, 0.85, 0.55, 0.75, 0.80, 0.65, 0.65, 0.60, 0.60], Pt(7.2), (50, 50)
 
     # 4. Table 3: Per-Class Diagnostic Performance (5 columns)
-    if 'recall / sensitivity' in hdr_text:
+    if 'recall / sensitivity' in hdr_text or 'class grade' in hdr_text:
         return [1.20, 1.80, 1.35, 1.30, 1.35], Pt(8.0), (70, 70)
 
     # 5. Table 4: Accuracy Enhancement (7 columns)
-    if 'model configuration' in hdr_text and 'catastrophic' in hdr_text:
+    if ('model configuration' in hdr_text or 'ensemble configurations' in hdr_text) and 'catastrophic' in hdr_text:
         return [1.70, 0.90, 0.85, 0.80, 0.90, 0.90, 0.95], Pt(7.5), (60, 60)
 
-    # 6. Table 5: Post-Hoc Logit Adjustment Temperature Sweep (6 columns)
-    if 'logit adjustment' in hdr_text:
+    # 6. Table: Training Details / Hyperparameters (6 columns)
+    if ('hyperparameter' in hdr_text or 'training configuration' in hdr_text) and num_cols == 6:
+        return [1.75, 1.05, 1.05, 1.05, 1.05, 1.05], Pt(7.5), (50, 50)
+
+    # 7. Table: Clinical Referral Triage (6 columns)
+    if 'under-triage' in hdr_text and 'over-referral' in hdr_text:
+        return [1.80, 1.05, 0.95, 1.05, 0.95, 1.20], Pt(7.5), (55, 55)
+
+    # 8. Table 6: Post-Hoc Logit Adjustment Temperature Sweep (6 columns)
+    if ('logit adjustment' in hdr_text or 'temperature' in hdr_text) and num_cols == 6:
         return [1.80, 0.85, 0.85, 0.85, 1.30, 1.35], Pt(8.0), (70, 70)
 
     # Default fallback: uniform distribution across 7.0 inches
@@ -580,8 +601,8 @@ def render_table(doc, table_lines):
 
     # Add space after table
     p_spacer = doc.add_paragraph()
-    p_spacer.paragraph_format.space_before = Pt(2)
-    p_spacer.paragraph_format.space_after = Pt(6)
+    p_spacer.paragraph_format.space_before = Pt(0)
+    p_spacer.paragraph_format.space_after = Pt(3)
 
 if __name__ == "__main__":
     import sys
