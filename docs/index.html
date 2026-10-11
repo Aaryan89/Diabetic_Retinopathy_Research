@@ -60,22 +60,22 @@
         <!-- Trained Models -->
         <section id="models">
             <h2 class="section-title">Trained Models & Methodology</h2>
-            <p>We evaluated four distinct paradigms under strictly controlled, identical conditions on a mobile NVIDIA GeForce RTX 5050 GPU (allocating &lt;540 MiB VRAM).</p>
+            <p>We evaluated five distinct paradigms under strictly controlled, identical conditions on a mobile NVIDIA GeForce RTX 5050 GPU (allocating &lt;540 MiB VRAM). All models share an identical 5.3M-parameter EfficientNet-B0 backbone. To prevent overfitting on low-level representations during specialized ordinal optimization, Variant D (CORN) freezes early convolutional blocks (stages 0–3, <code>features[:4]</code>). In contrast, Variants A, B, C, and E are fine-tuned end-to-end with all backbone layers unfrozen.</p>
 
             <h3>Variant A: Nominal Softmax Baseline</h3>
-            <p>Trained using standard cross-entropy. It optimizes independent nominal probabilities without any concept of rank. The loss gradient is symmetric with respect to all non-target classes.</p>
+            <p>Trained using standard cross-entropy with all layers unfrozen. It optimizes independent nominal probabilities without any concept of rank. The loss gradient treats all non-target classes symmetrically.</p>
             <div class="math-block">
                 L<sub>CE</sub> = − ∑ y<sub>k</sub> log(p̂<sub>k</sub>)
             </div>
 
             <h3>Variant B: Consistent Rank Logits (CORAL)</h3>
-            <p>Reformulates the 5-class ordinal problem into 4 binary classification subproblems. However, we found that on highly imbalanced medical data, the overwhelming flood of negative gradients from healthy retinas dominates the shared projection vector, crushing the decision intervals for minority classes like Grade 3 Severe NPDR.</p>
+            <p>Reformulates the 5-class ordinal problem into 4 binary classification subproblems. However, on highly imbalanced medical data, negative gradients from healthy retinas dominate the shared projection vector, crushing decision intervals for minority classes like Grade 3 Severe NPDR.</p>
 
             <h3>Variant C: Continuous Regression</h3>
-            <p>Maps the embedding directly to a continuous scalar prediction, trained with Smooth L1 Loss. At test time, the scalar is rounded. This method strictly penalizes large distance errors quadratically but can overly compress predictions toward the mean.</p>
+            <p>Maps the embedding directly to a continuous scalar prediction trained with Smooth L1 Loss. At test time, the scalar is clipped and rounded. This method strictly penalizes large distance errors quadratically, yielding low multi-grade errors.</p>
 
             <h3>Variant D: Conditional Ordinal Regression for Neural Networks (CORN)</h3>
-            <p>Instead of predicting unconditioned probabilities, CORN models the step-by-step conditional probability of exceeding rank k, given that the previous rank was already reached. Crucially, a healthy patient updates only the first task, protecting minority classes.</p>
+            <p>Instead of predicting unconditioned probabilities, CORN models the step-by-step conditional probability of exceeding rank k given that rank k−1 was reached. Stages 0–3 of the backbone are frozen to stabilize low-level edge features, and training incorporates effective-number class weighting and a WeightedRandomSampler.</p>
             <div class="math-block">
                 L<sub>CORN</sub>(x, y) = [ − 1 / min(y + 1, K − 1) ] ∑ BCE( g<sub>k</sub>(x), 𝕀(y > k) )
             </div>
@@ -84,6 +84,9 @@
             <div class="math-block">
                 Total Loss = L<sub>CORN</sub> + λ · L<sub>SoftQWK</sub>
             </div>
+
+            <h3>Featured Model: Variant E (3-Seed Ensemble + TTA)</h3>
+            <p>Designed for diagnostic telemedicine where overall classification accuracy and multi-seed stability are paramount. Three independent models are trained end-to-end (all layers unfrozen) across random seeds {42, 43, 44} with regularized label smoothing (&alpha; = 0.08) and safe-light geometric augmentations. At inference, predictions are averaged across models alongside 4-way flip Test-Time Augmentation (TTA), with post-hoc logit adjustment available for threshold calibration.</p>
         </section>
 
         <!-- Results & Comparison -->
@@ -91,21 +94,22 @@
             <h2 class="section-title">Outputs, Results & Comparison</h2>
             <p>All models were evaluated on a locked holdout test set of 550 images.</p>
 
-            <h3>Key Breakthroughs</h3>
+            <h3>Key Findings</h3>
             <ul>
-                <li><strong>Resolution of Minority-Stage Collapse:</strong> Our Variant D (CORN) framework elevated Severe NPDR (Grade 3) sensitivity to <strong>65.7%</strong> (compared to 0.0% in unweighted CORAL).</li>
-                <li><strong>Catastrophic Error Reduction:</strong> Multi-grade triage errors (|y - ŷ| ≥ 2) were slashed by 80.7% down to just <strong>5.1%</strong> in Variant D.</li>
-                <li><strong>High-Accuracy Confirmatory Pipeline:</strong> An accuracy-optimized 3-seed ensemble (with label smoothing and test-time augmentation) achieved a raw classification accuracy of <strong>83.82%</strong> and a peak QWK of <strong>0.8929</strong> using post-hoc logit adjustment.</li>
+                <li><strong>Featured High-Accuracy Model (Variant E: 3-Seed Ensemble + TTA):</strong> Achieved the highest overall accuracy of <strong>83.82%</strong> (vs. 83.45% for the best single seed), with QWK of <strong>0.8859</strong> and project-low MAE of <strong>0.2200</strong>, reducing stochastic multi-seed variance (single-seed mean 82.73% &rarr; 83.82%) with a catastrophic error rate of <strong>4.36%</strong>.</li>
+                <li><strong>Minority-Stage Protection (Variant D: CORN):</strong> Elevated Severe NPDR (Grade 3) sensitivity to <strong>65.7%</strong> (compared to 0.0% in unweighted CORAL and 41.7% in Softmax baseline), achieving the lowest under-triage rate of <strong>15.07%</strong>.</li>
+                <li><strong>Distance-Bounded Robustness (Variant C: Continuous Regression):</strong> Held catastrophic multi-grade triage errors (|y - ŷ| ≥ 2) to a study-lowest <strong>3.8%</strong>.</li>
+                <li><strong>Clinical Triage Efficiency:</strong> Variant E (&tau; = 0.0) yields the lowest over-referral rate (<strong>2.52%</strong>), preventing clinic overburden, while post-hoc logit adjustment (&tau; = 1.0) balances under-triage down to 19.18%.</li>
             </ul>
 
             <div class="img-container">
                 <img src="assets/images/all_confusion_matrices.png" alt="Confusion Matrices">
-                <p class="img-caption">Fig 2: Side-by-Side Confusion Matrices comparing the 4 variants.</p>
+                <p class="img-caption">Fig 2: Side-by-Side Confusion Matrices comparing all five model variants on the locked holdout test set (N = 550).</p>
             </div>
 
             <div class="img-container">
                 <img src="assets/images/error_distance_histogram.png" alt="Error Distance Histogram">
-                <p class="img-caption">Fig 3: Prediction Error Distance Distribution showing the elimination of severe off-by-3 and off-by-4 errors in Variant D.</p>
+                <p class="img-caption">Fig 3: Prediction Error Distance Distribution showing the elimination of severe off-by-3 and off-by-4 errors in Variant D and lowest MAE (0.2200) in Variant E.</p>
             </div>
 
             <h3>Performance Comparison Table</h3>
@@ -113,55 +117,138 @@
                 <thead>
                     <tr>
                         <th>Model Variant / Configuration</th>
-                        <th>QWK</th>
+                        <th>QWK (Primary)</th>
                         <th>Accuracy (%)</th>
+                        <th>MAE</th>
                         <th>Catastrophic Err (d ≥ 2)</th>
+                        <th>Severe Recall (Grade 3)</th>
+                        <th>Severe F1 (Grade 3)</th>
                         <th>PDR F1 (Grade 4)</th>
                     </tr>
                 </thead>
                 <tbody>
                     <tr>
-                        <td><strong>A: Softmax Baseline</strong></td>
+                        <td><strong>Variant A: Softmax Baseline</strong></td>
                         <td>0.8724</td>
                         <td>80.18%</td>
-                        <td>5.6%</td>
-                        <td>0.5147</td>
+                        <td>0.2673</td>
+                        <td>5.64%</td>
+                        <td>41.7%</td>
+                        <td>0.3810</td>
+                        <td>0.5169</td>
                     </tr>
                     <tr>
-                        <td><strong>B: CORAL Ordinal</strong></td>
+                        <td><strong>Variant B: CORAL Ordinal</strong></td>
                         <td>0.7273</td>
                         <td>59.64%</td>
-                        <td>26.4%</td>
+                        <td>0.6964</td>
+                        <td>26.40%</td>
+                        <td>0.0%</td>
+                        <td>0.0000</td>
                         <td>0.3692</td>
                     </tr>
                     <tr>
-                        <td><strong>C: Continuous Reg</strong></td>
+                        <td><strong>Variant C: Continuous Regression</strong></td>
                         <td>0.8788</td>
                         <td>75.64%</td>
-                        <td><strong>3.8%</strong></td>
+                        <td>0.2873</td>
+                        <td><strong>3.80%</strong></td>
+                        <td>38.4%</td>
+                        <td>0.2528</td>
                         <td>0.3589</td>
                     </tr>
                     <tr>
-                        <td><strong>D: CORN (Safest Minority Recall)</strong></td>
+                        <td><strong>Variant D (CORN): Conditional Ordinal</strong></td>
                         <td>0.8482</td>
                         <td>69.09%</td>
-                        <td>5.1%</td>
+                        <td>0.3764</td>
+                        <td>5.10%</td>
+                        <td><strong>65.7%</strong></td>
+                        <td>0.2724</td>
                         <td>0.4584</td>
                     </tr>
                     <tr>
-                        <td><strong>3-Seed Ensemble (Highest Accuracy)</strong></td>
+                        <td><strong>Variant E: 3-Seed Ensemble + TTA</strong></td>
                         <td><strong>0.8859</strong></td>
                         <td><strong>83.82%</strong></td>
-                        <td>4.3%</td>
+                        <td><strong>0.2200</strong></td>
+                        <td>4.36%</td>
+                        <td>44.8%</td>
+                        <td><strong>0.4561</strong></td>
                         <td><strong>0.5570</strong></td>
                     </tr>
                 </tbody>
             </table>
 
-            <p><em>(Note: While Variant D (CORN) has lower raw accuracy (69.09%), it was designed specifically for safety—maximizing Severe NPDR recall (65.7%) at the expense of borderline-healthy cases. To achieve the 83.82% peak accuracy, we used a separate 3-seed ensemble with test-time augmentation.)</em></p>
+            <p><em>(Note: Bold indicates best value in each column. Quadratic Weighted Kappa (QWK) is the primary clinical ordinal metric. Variant E catastrophic error is 4.36%. While Variant E achieves the highest accuracy (83.82%) and lowest MAE (0.2200), its sensitivity gain on Grade 3 is modest (44.8%); Variant D achieves the highest Severe NPDR recall (65.7%) for high-sensitivity screening, and Variant C provides the lowest catastrophic error (3.8%).)</em></p>
+
+            <h3>Clinical Referral Triage Performance (N = 550)</h3>
+            <p>In tele-ophthalmology triage, sight-threatening DR (Grades 3–4, N = 73) requires urgent specialist referral, while Grades 0–2 (N = 477) receive routine monitoring. <em>Under-triage</em> represents true Grade 3–4 patients misclassified as Grade 0–2 (delayed specialist care), while <em>over-referral</em> represents true Grade 0–2 patients misclassified as Grade 3–4 (tertiary clinic overburden).</p>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Model Variant</th>
+                        <th>Under-Triage Count</th>
+                        <th>Under-Triage Rate (%)</th>
+                        <th>Over-Referral Count</th>
+                        <th>Over-Referral Rate (%)</th>
+                        <th>Clinical Trade-off Profile</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>Variant A: Softmax Baseline</strong></td>
+                        <td>21 / 73</td>
+                        <td>28.77%</td>
+                        <td>27 / 477</td>
+                        <td>5.66%</td>
+                        <td>Unweighted multiclass baseline</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Variant B: CORAL Ordinal</strong></td>
+                        <td>8 / 73</td>
+                        <td>10.96%</td>
+                        <td>96 / 477</td>
+                        <td>20.13%</td>
+                        <td>High false referrals from class collapse</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Variant C: Continuous Regression</strong></td>
+                        <td>23 / 73</td>
+                        <td>31.51%</td>
+                        <td>30 / 477</td>
+                        <td>6.29%</td>
+                        <td>Conservative; bounds multi-grade drift</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Variant D (CORN): Conditional Ordinal</strong></td>
+                        <td>11 / 73</td>
+                        <td><strong>15.07%</strong></td>
+                        <td>82 / 477</td>
+                        <td>17.19%</td>
+                        <td>High-sensitivity frontline screening</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Variant E: 3-Seed Ens + TTA (&tau; = 0.0)</strong></td>
+                        <td>22 / 73</td>
+                        <td>30.14%</td>
+                        <td>12 / 477</td>
+                        <td><strong>2.52%</strong></td>
+                        <td>Minimum false alarms; confirmatory focus</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Variant E: 3-Seed Ens + TTA (&tau; = 1.0)</strong></td>
+                        <td>14 / 73</td>
+                        <td>19.18%</td>
+                        <td>44 / 477</td>
+                        <td>9.22%</td>
+                        <td>Balanced trade-off via logit adjustment</td>
+                    </tr>
+                </tbody>
+            </table>
 
             <h3>Comparison to Existing Work</h3>
-            <p>Our single EfficientNet-B0 backbone dramatically outperformed existing complex multi-branch architectures. For example, published networks like Shakibania et al. (using 30 million parameters) achieved only 36.84% Severe NPDR recall. Our lightweight CORN architecture achieved <strong>+28.86% absolute improvement</strong> with 82% fewer parameters.</p>
+            <p>Our lightweight EfficientNet-B0 backbone (5.3M parameters) demonstrated strong efficiency compared to prior multi-branch networks. For example, Shakibania et al. [2] (using ~30M parameters across ResNet-50 and EfficientNet-B0) reported 36.84% Severe NPDR recall (different dataset and task setting; not a head-to-head comparison). Our Variant D (CORN) attained <strong>65.7%</strong> Severe NPDR recall on the APTOS 2019 benchmark with over 80% fewer parameters, while Variant E reached <strong>83.82%</strong> overall accuracy.</p>
 
         </section>
 
@@ -170,15 +257,19 @@
             <h2 class="section-title">Conclusions</h2>
             <p>Our empirical findings establish four core conclusions:</p>
             <ol>
-                <li><strong>The CORN Breakthrough:</strong> Conditional ordinal regression perfectly resolves the breakdown of unweighted CORAL on minority classes, protecting severe grades from being drowned out by the healthy majority.</li>
-                <li><strong>Distance-Aware Robustness:</strong> Both Continuous Regression and CORN tightly bound catastrophic triage errors, guaranteeing high clinical safety.</li>
-                <li><strong>High-Accuracy Potential:</strong> Simple but rigorous post-hoc adjustments and ensembling on standard backbones can yield state-of-the-art grading accuracy without introducing architectural complexity.</li>
-                <li><strong>Hardware & Deployment Efficiency:</strong> By prioritizing mathematical loss formulation over parameter bloat, clinical-grade performance is attainable on cost-effective, portable hardware.</li>
+                <li><strong>Featured High-Accuracy Ensemble:</strong> Variant E: 3-Seed Ensemble + TTA achieved the study's highest classification accuracy (<strong>83.82%</strong>), lowest MAE (<strong>0.2200</strong>), and QWK <strong>0.8859</strong>, stabilizing stochastic initialization variance across seeds with a low catastrophic error rate of <strong>4.36%</strong> and the lowest over-referral rate (<strong>2.52%</strong>).</li>
+                <li><strong>Minority-Class Protection:</strong> Conditional ordinal regression (CORN) effectively resolved the breakdown of unweighted CORAL on minority classes, elevating Severe NPDR sensitivity to <strong>65.7%</strong> and reducing under-triage to <strong>15.07%</strong>.</li>
+                <li><strong>Distance-Aware Error Bounding:</strong> Continuous Regression (Variant C) tightly bounded multi-grade errors, achieving the study's lowest catastrophic error rate of <strong>3.8%</strong>.</li>
+                <li><strong>Hardware & Deployment Efficiency:</strong> By prioritizing loss formulation and multi-seed stability over parameter bloat, high clinical utility is achievable on a standard 5.3M-parameter backbone on consumer laptop hardware under 1 GB VRAM.</li>
             </ol>
             
             <div class="img-container">
                 <img src="assets/images/uml_activity_diagram.png" alt="UML Activity Diagram">
                 <p class="img-caption">Fig 4: UML Activity Diagram for Clinical Screening and AI Triage Workflow.</p>
+            </div>
+            <div class="img-container">
+                <img src="assets/images/uml_class_diagram.png" alt="UML Class Diagram">
+                <p class="img-caption">Fig 5: UML Class Diagram specifying Object-Oriented Software Architecture with EnsembleEngine.</p>
             </div>
         </section>
 
